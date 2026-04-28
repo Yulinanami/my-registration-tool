@@ -14,6 +14,8 @@ const LOG_DIR = path.join(PROJECT_ROOT, 'results');
 const LOG_PATH = path.join(LOG_DIR, 'run.log');
 const BROWSER_ARGS = [
   '--disable-blink-features=AutomationControlled',
+  '--disable-translate',
+  '--disable-features=Translate,TranslateUI',
   '--no-sandbox',
   '--disable-setuid-sandbox',
 ];
@@ -28,18 +30,11 @@ function loadConfig() {
     maxRetries: 20,
     typingDelayMin: 50,
     typingDelayMax: 150,
-    shortDelayMin: 500,
-    shortDelayMax: 1500,
-    stepDelayMin: 1000,
-    stepDelayMax: 2000,
-    submitDelayMin: 2000,
-    submitDelayMax: 4000,
     retryDelayMin: 1000,
     retryDelayMax: 2000,
-    pageSettleDelayMs: 2000,
-    navigationFallbackDelayMs: 3000,
     statusCheckIntervalMs: 2000,
     signUpButtonTimeoutMs: 10000,
+    signUpClickCheckMs: 1200,
     registrationStatusTimeoutMs: 15000,
     cloudflareCheckIntervalMs: 1000,
     cloudflareMaxWaitMs: 30000,
@@ -47,11 +42,12 @@ function loadConfig() {
     mailEmailTimeoutMs: 15000,
     mailEmailCheckIntervalMs: 1000,
     mailRefreshWaitMs: 1500,
-    mailOpenWaitMs: 2000,
     mailDetailTimeoutMs: 5000,
+    mailDetailRetryCount: 3,
+    mailDetailRetryDelayMs: 1000,
     popupCloseDelayMs: 500,
-    inputClearDelayMs: 100,
     passwordInputTimeoutMs: 20000,
+    fullName: 'John Doe',
     firstName: 'John',
     lastName: 'Doe',
     birthdayText: '01/15/2000',
@@ -325,7 +321,6 @@ async function registerOne(browser, config, logger, attemptNum) {
       siteContext = await browser.newContext({
         locale: 'en-US',
         viewport: { width: 1280, height: 720 },
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       });
 
       registrar = new Registrar(siteContext, config, logger);

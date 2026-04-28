@@ -1,3 +1,5 @@
+const { extractVerification } = require('./parser');
+
 class MailScraper {
   // 保存浏览器和日志
   constructor(context, logger, config = {}) {
@@ -30,8 +32,9 @@ class MailScraper {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
+      const inboxTextBeforeRefresh = await this._readInboxText();
       await this._refreshInbox();
-      await this.page.waitForTimeout(this.config.mailRefreshWaitMs);
+      await this._waitForInboxUpdate(inboxTextBeforeRefresh, this.config.mailRefreshWaitMs);
 
       const emailItems = this.page.locator('ul#emailList > li');
       const count = await emailItems.count();
@@ -43,8 +46,13 @@ class MailScraper {
           if (text && (text.includes('OpenAI') || text.includes('openai') || text.includes('ChatGPT') || text.includes('verify'))) {
             this.logger.info(`[Mail] 找到验证邮件: ${text.trim().substring(0, 80)}`);
             await item.click();
-            await this.page.waitForTimeout(this.config.mailOpenWaitMs);
-            return await this._readEmailDetail();
+
+            const emailData = await this._readEmailDetailWithRetry();
+            if (emailData) {
+              return emailData;
+            }
+
+            this.logger.warn('[Mail] 验证邮件内容还没加载完整，继续等待...');
           }
         }
       }
@@ -63,7 +71,7 @@ class MailScraper {
 
     while (Date.now() - startTime < timeout) {
       const text = await this._readCurrentEmail();
-      if (text && text.includes('@')) {
+      if (this._isValidEmail(text)) {
         return text;
       }
       this.logger.info(`[Mail] 等待邮箱生成... (当前: ${text})`);
@@ -72,7 +80,12 @@ class MailScraper {
 
     const fallback = await this._readCurrentEmail();
     this.logger.warn(`[Mail] 等待邮箱超时，当前值: ${fallback}`);
-    return fallback;
+    return this._isValidEmail(fallback) ? fallback : null;
+  }
+
+  // 判断邮箱地址是否完整
+  _isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '');
   }
 
   // 读取当前邮箱地址
@@ -92,18 +105,61 @@ class MailScraper {
       await this._dismissPopups();
 
       const refreshBtn = this.page.locator('#refreshInboxBtn');
-      if (await refreshBtn.count() > 0 && await refreshBtn.first().isVisible()) {
-        await refreshBtn.first().click();
+      const visibleRefreshBtn = await this._findVisibleLocator(refreshBtn, 0);
+      if (visibleRefreshBtn) {
+        await visibleRefreshBtn.click();
         return;
       }
 
       const altBtn = this.page.locator('button:has-text("刷新"), button:has-text("Refresh")');
-      if (await altBtn.count() > 0 && await altBtn.first().isVisible()) {
-        await altBtn.first().click();
+      const visibleAltBtn = await this._findVisibleLocator(altBtn, 0);
+      if (visibleAltBtn) {
+        await visibleAltBtn.click();
       }
     } catch (e) {
       this.logger.warn(`[Mail] 刷新收件箱失败: ${e.message}`);
     }
+  }
+
+  // 重试读取邮件内容
+  async _readEmailDetailWithRetry() {
+    const retryCount = this.config.mailDetailRetryCount || 3;
+
+    for (let i = 0; i < retryCount; i++) {
+      const emailData = await this._readEmailDetail();
+      if (emailData && (emailData.body || emailData.html) && extractVerification(emailData)) {
+        return emailData;
+      }
+
+      if (i < retryCount - 1) {
+        await this.page.waitForTimeout(this.config.mailDetailRetryDelayMs || 1000);
+      }
+    }
+
+    return null;
+  }
+
+  // 读取收件箱文字
+  async _readInboxText() {
+    try {
+      return (await this.page.locator('ul#emailList').textContent()) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // 等待收件箱刷新
+  async _waitForInboxUpdate(beforeText, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() <= deadline) {
+      const text = await this._readInboxText();
+      if (text !== beforeText || /openai|chatgpt|verify|verification/i.test(text)) {
+        return true;
+      }
+      await this.page.waitForTimeout(200);
+    }
+
+    return false;
   }
 
   // 读取邮件内容
@@ -118,19 +174,22 @@ class MailScraper {
 
       try {
         const fromEl = this.page.locator('#modalFrom, .email-from, [class*="from"]');
-        if (await fromEl.count() > 0) from = (await fromEl.first().textContent()).trim();
+        const visibleFromEl = await this._findVisibleLocator(fromEl, 0);
+        if (visibleFromEl) from = (await visibleFromEl.textContent()).trim();
       } catch (e) {}
 
       try {
         const subjectEl = this.page.locator('.email-detail-subject-wrap, #modalSubject, .email-subject');
-        if (await subjectEl.count() > 0) subject = (await subjectEl.first().textContent()).trim();
+        const visibleSubjectEl = await this._findVisibleLocator(subjectEl, 0);
+        if (visibleSubjectEl) subject = (await visibleSubjectEl.textContent()).trim();
       } catch (e) {}
 
       try {
         const bodyEl = this.page.locator('.email-detail-body, #emailDetailBody');
-        if (await bodyEl.count() > 0) {
-          body = (await bodyEl.first().textContent()).trim();
-          html = await bodyEl.first().innerHTML();
+        const visibleBodyEl = await this._findVisibleLocator(bodyEl, 0);
+        if (visibleBodyEl) {
+          body = (await visibleBodyEl.textContent()).trim();
+          html = await visibleBodyEl.innerHTML();
         }
       } catch (e) {}
 
@@ -169,12 +228,34 @@ class MailScraper {
 
       for (const sel of closeSelectors) {
         const btn = this.page.locator(sel);
-        if (await btn.count() > 0 && await btn.first().isVisible()) {
-          await btn.first().click();
-          await this.page.waitForTimeout(this.config.popupCloseDelayMs);
+        const visibleBtn = await this._findVisibleLocator(btn, 0);
+        if (visibleBtn) {
+          await visibleBtn.click();
+          await visibleBtn.waitFor({ state: 'hidden', timeout: this.config.popupCloseDelayMs }).catch(() => {});
         }
       }
     } catch (e) {}
+  }
+
+  // 找到当前可见的元素
+  async _findVisibleLocator(locator, timeoutMs = 0, intervalMs = 200) {
+    const deadline = Date.now() + timeoutMs;
+
+    while (true) {
+      const count = await locator.count().catch(() => 0);
+      for (let i = 0; i < count; i++) {
+        const item = locator.nth(i);
+        if (await item.isVisible().catch(() => false)) {
+          return item;
+        }
+      }
+
+      if (Date.now() >= deadline) {
+        return null;
+      }
+
+      await this.page.waitForTimeout(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
+    }
   }
 
   // 关闭邮箱页面

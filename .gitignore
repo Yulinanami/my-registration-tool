@@ -1,4 +1,4 @@
 node_modules/*
+results/
 PLAN.md
-*.log
 emails.txt

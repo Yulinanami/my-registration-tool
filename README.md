@@ -53,16 +53,8 @@ npm run install-browser
   "maxRetries": 20,
   "typingDelayMin": 15,
   "typingDelayMax": 40,
-  "shortDelayMin": 300,
-  "shortDelayMax": 800,
-  "stepDelayMin": 800,
-  "stepDelayMax": 1500,
-  "submitDelayMin": 4000,
-  "submitDelayMax": 6000,
   "retryDelayMin": 800,
   "retryDelayMax": 1500,
-  "pageSettleDelayMs": 1500,
-  "navigationFallbackDelayMs": 3000,
   "statusCheckIntervalMs": 1500,
   "signUpButtonTimeoutMs": 10000,
   "registrationStatusTimeoutMs": 15000,
@@ -72,11 +64,12 @@ npm run install-browser
   "mailEmailTimeoutMs": 15000,
   "mailEmailCheckIntervalMs": 1000,
   "mailRefreshWaitMs": 800,
-  "mailOpenWaitMs": 1000,
   "mailDetailTimeoutMs": 5000,
+  "mailDetailRetryCount": 3,
+  "mailDetailRetryDelayMs": 1000,
   "popupCloseDelayMs": 200,
-  "inputClearDelayMs": 100,
   "passwordInputTimeoutMs": 20000,
+  "fullName": "John Doe",
   "firstName": "John",
   "lastName": "Doe",
   "birthdayText": "01/15/2000",
@@ -92,23 +85,19 @@ npm run install-browser
 | `headless` | 是否隐藏浏览器窗口 | `false` |
 | `maxRetries` | 最多尝试次数 | `20` |
 | `typingDelayMin` / `typingDelayMax` | 每个字的输入间隔 | `15` / `40` |
-| `shortDelayMin` / `shortDelayMax` | 点按钮前后的短等待 | `300` / `800` |
-| `stepDelayMin` / `stepDelayMax` | 主要步骤之间的等待 | `800` / `1500` |
-| `submitDelayMin` / `submitDelayMax` | 提交密码后的等待 | `4000` / `6000` |
 | `retryDelayMin` / `retryDelayMax` | 失败重试前的等待 | `800` / `1500` |
-| `pageSettleDelayMs` | 页面加载后的固定等待 | `1500` |
-| `navigationFallbackDelayMs` | 点击后没跳转时的等待 | `3000` |
 | `statusCheckIntervalMs` | 检查注册结果的间隔 | `1500` |
 | `signUpButtonTimeoutMs` | 等待注册入口打开的上限 | `10000` |
 | `registrationStatusTimeoutMs` | 提交密码后等待结果的上限 | `15000` |
 | `cloudflareCheckIntervalMs` / `cloudflareMaxWaitMs` | 等待页面保护的间隔和上限 | `1000` / `30000` |
 | `mailPollIntervalMs` / `mailPollTimeoutMs` | 查看验证邮件的间隔和上限 | `3000` / `120000` |
 | `mailPageTimeoutMs` / `mailEmailTimeoutMs` | 邮箱页面和邮箱地址等待上限 | `30000` / `15000` |
-| `mailRefreshWaitMs` / `mailOpenWaitMs` / `mailDetailTimeoutMs` | 邮箱刷新、打开邮件、读取详情等待 | `800` / `1000` / `5000` |
+| `mailRefreshWaitMs` / `mailDetailTimeoutMs` | 邮箱刷新和读取详情等待 | `800` / `5000` |
+| `mailDetailRetryCount` / `mailDetailRetryDelayMs` | 邮件正文没加载出来时的重试 | `3` / `1000` |
 | `popupCloseDelayMs` | 关闭弹窗后的等待 | `200` |
-| `inputClearDelayMs` | 清空输入框后的等待 | `100` |
 | `passwordInputTimeoutMs` | 等待密码框的上限 | `20000` |
-| `firstName` / `lastName` | 自动填写的姓名 | `John` / `Doe` |
+| `fullName` | 自动填写的完整姓名 | `John Doe` |
+| `firstName` / `lastName` | 没有 `fullName` 时拼成姓名 | `John` / `Doe` |
 | `birthdayText` / `birthdayDate` | 文本生日和日期框生日 | `01/15/2000` / `2000-01-15` |
 | `age` | 自动填写的年龄 | `25` |
 | `chromiumPath` | 自定义 Chromium 路径，可不填 | 自动查找 |
