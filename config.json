@@ -5,7 +5,5 @@
   "mailPollTimeoutMs": 120000,
   "maxRetries": 20,
   "typingDelayMin": 50,
-  "typingDelayMax": 150,
-  "stepDelayMin": 1000,
-  "stepDelayMax": 3000
+  "typingDelayMax": 150
 }

@@ -1,13 +1,3 @@
-/**
- * 注册辅助工具 — 主入口
- *
- * 流程：
- * 1. 控制台输入需要注册的数量 N
- * 2. 循环：Mail 获取邮箱 → 注册流程 → Mail 获取验证码 → 验证
- * 3. 成功的账号写入 emails.txt
- * 4. 失败则换邮箱重试，直到成功 N 个
- */
-
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -16,14 +6,13 @@ const winston = require('winston');
 const { MailScraper } = require('./scraper');
 const { Registrar, RegisterResult } = require('./registrar');
 
-// ============ 配置 ============
-
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const CONFIG_PATH = path.join(PROJECT_ROOT, 'config.json');
 const EMAILS_OUTPUT = path.join(PROJECT_ROOT, 'emails.txt');
 const LOG_DIR = path.join(PROJECT_ROOT, 'results');
 const LOG_PATH = path.join(LOG_DIR, 'run.log');
 
+// 读取配置文件
 function loadConfig() {
   const defaults = {
     password: 'qwerasdfzxcv',
@@ -33,26 +22,26 @@ function loadConfig() {
     maxRetries: 20,
     typingDelayMin: 50,
     typingDelayMax: 150,
-    stepDelayMin: 1000,
-    stepDelayMax: 3000,
   };
+
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const userConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
       return { ...defaults, ...userConfig };
     }
   } catch (e) {
-    console.warn(`⚠️  读取配置文件失败，使用默认值: ${e.message}`);
+    console.warn(`读取配置文件失败，使用默认值: ${e.message}`);
   }
+
   return defaults;
 }
 
-// ============ 日志 ============
-
+// 创建日志记录
 function createLogger() {
   if (!fs.existsSync(LOG_DIR)) {
     fs.mkdirSync(LOG_DIR, { recursive: true });
   }
+
   return winston.createLogger({
     level: 'info',
     format: winston.format.combine(
@@ -71,10 +60,10 @@ function createLogger() {
   });
 }
 
-// ============ 工具函数 ============
-
+// 读取用户输入
 function askQuestion(question) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
   return new Promise((resolve) => {
     rl.question(question, (answer) => {
       rl.close();
@@ -83,23 +72,36 @@ function askQuestion(question) {
   });
 }
 
+// 保存成功账号
 function appendToEmailsFile(email, password) {
   const line = `${email}----${password}\n`;
   fs.appendFileSync(EMAILS_OUTPUT, line, 'utf-8');
 }
 
+// 等待一小段随机时间
 function randomDelay(min, max) {
   return new Promise((resolve) => setTimeout(resolve, Math.random() * (max - min) + min));
 }
 
-// ============ 核心流程 ============
+// 打开浏览器
+async function launchBrowser(config, chromePath) {
+  return await chromium.launch({
+    headless: config.headless,
+    executablePath: chromePath,
+    args: [
+      '--disable-blink-features=AutomationControlled',
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+    ],
+  });
+}
 
+// 注册一个账号
 async function registerOne(browser, config, logger, attemptNum) {
   logger.info(`\n${'='.repeat(60)}`);
   logger.info(`开始第 ${attemptNum} 次尝试注册`);
   logger.info('='.repeat(60));
 
-  // 创建 Mail 上下文（独立）
   const mailContext = await browser.newContext({
     locale: 'zh-CN',
     viewport: { width: 1280, height: 720 },
@@ -110,109 +112,100 @@ async function registerOne(browser, config, logger, attemptNum) {
   let success = false;
 
   try {
-    // Step 1: 从 Mail 获取临时邮箱
     email = await scraper.init();
     if (!email) {
-      logger.error('❌ 无法获取邮箱');
+      logger.error('无法获取邮箱');
       return false;
     }
-    logger.info(`📧 获取到临时邮箱: ${email}`);
+    logger.info(`获取到临时邮箱: ${email}`);
 
-    // Step 2: 用这个邮箱去注册
-    const siteContext = await browser.newContext({
-      locale: 'en-US',
-      viewport: { width: 1280, height: 720 },
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    });
-
-    const registrar = new Registrar(siteContext, config, logger);
+    let siteContext = null;
+    let registrar = null;
 
     try {
+      siteContext = await browser.newContext({
+        locale: 'en-US',
+        viewport: { width: 1280, height: 720 },
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      });
+
+      registrar = new Registrar(siteContext, config, logger);
+
       const regResult = await registrar.register(email);
-      logger.info(`📋 注册结果: ${regResult.result} — ${regResult.message}`);
+      logger.info(`注册结果: ${regResult.result} - ${regResult.message}`);
 
       if (regResult.result === RegisterResult.NEED_VERIFICATION) {
-        // Step 3: 回 GPTMail 等待验证邮件
-        logger.info('📬 等待验证邮件...');
+        logger.info('等待验证邮件...');
         const emailData = await scraper.waitForVerificationEmail(
           config.mailPollIntervalMs,
           config.mailPollTimeoutMs
         );
 
         if (emailData) {
-          logger.info(`📨 收到验证邮件: ${emailData.subject || '(无标题)'}`);
-          // Step 4: 处理验证
+          logger.info(`收到验证邮件: ${emailData.subject || '(无标题)'}`);
           const verifyResult = await registrar.handleVerification(emailData);
-          logger.info(`✉️  验证结果: ${verifyResult.result} — ${verifyResult.message}`);
+          logger.info(`验证结果: ${verifyResult.result} - ${verifyResult.message}`);
 
           if (verifyResult.result === RegisterResult.SUCCESS) {
             success = true;
           }
         } else {
-          logger.warn('⏰ 验证邮件等待超时');
+          logger.warn('验证邮件等待超时');
         }
       } else if (regResult.result === RegisterResult.SUCCESS) {
         success = true;
       }
-      // 其它情况（CAPTCHA、域名被拒等）：不成功，外层会重试
     } finally {
-      try { await registrar.close(); } catch (e) { /* ignore */ }
-      try { await chatgptContext.close(); } catch (e) { /* ignore */ }
+      if (registrar) {
+        try { await registrar.close(); } catch (e) {}
+      }
+      if (siteContext) {
+        try { await siteContext.close(); } catch (e) {}
+      }
     }
 
     if (success) {
-      logger.info(`\n🎉 注册成功！邮箱: ${email}, 密码: ${config.password}`);
+      logger.info(`\n注册成功，邮箱: ${email}, 密码: ${config.password}`);
       appendToEmailsFile(email, config.password);
-      logger.info(`📝 已写入 ${EMAILS_OUTPUT}`);
+      logger.info(`已写入 ${EMAILS_OUTPUT}`);
     }
 
     return success;
   } catch (error) {
-    logger.error(`❌ 注册过程异常: ${error.message}`);
+    logger.error(`注册过程异常: ${error.message}`);
     return false;
   } finally {
-    try { await scraper.close(); } catch (e) { /* ignore */ }
-    try { await mailContext.close(); } catch (e) { /* ignore */ }
+    try { await scraper.close(); } catch (e) {}
+    try { await mailContext.close(); } catch (e) {}
   }
 }
 
-// ============ 主程序 ============
-
+// 启动程序
 async function main() {
   console.log(`
   ╔══════════════════════════════════════════╗
   ║          注册辅助工具 v1.0               ║
   ║                                          ║
-  ║  🖱️  鼠标优先 · 自动化注册 · 批量处理    ║
+  ║  鼠标优先 · 自动化注册 · 批量处理        ║
   ╚══════════════════════════════════════════╝
   `);
 
   const config = loadConfig();
   const logger = createLogger();
 
-  // 获取目标注册数量（支持命令行参数：node src/index.js 3）
   let targetCount;
   const cliArg = process.argv[2];
   if (cliArg) {
     targetCount = parseInt(cliArg) || 1;
   } else {
-    const input = await askQuestion('📌 请输入需要注册的账号数量 (默认 1): ');
+    const input = await askQuestion('请输入需要注册的账号数量 (默认 1): ');
     targetCount = parseInt(input) || 1;
   }
   logger.info(`目标注册数量: ${targetCount}`);
 
-  // 启动浏览器（使用系统已安装的 Chrome）
   const chromePath = config.chromePath || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-  logger.info(`🚀 启动浏览器: ${chromePath}`);
-  let browser = await chromium.launch({
-    headless: config.headless,
-    executablePath: chromePath,
-    args: [
-      '--disable-blink-features=AutomationControlled',
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-    ],
-  });
+  logger.info(`启动浏览器: ${chromePath}`);
+  let browser = await launchBrowser(config, chromePath);
 
   let successCount = 0;
   let totalAttempts = 0;
@@ -222,34 +215,24 @@ async function main() {
       totalAttempts++;
 
       if (totalAttempts > config.maxRetries) {
-        logger.error(`❌ 已达最大重试次数 (${config.maxRetries})，停止`);
+        logger.error(`已达最大重试次数 (${config.maxRetries})，停止`);
         break;
       }
 
-      // 检查浏览器是否还活着，如果断开就重新启动
       if (!browser.isConnected()) {
-        logger.warn('⚠️  浏览器已断开，重新启动...');
-        browser = await chromium.launch({
-          headless: config.headless,
-          executablePath: chromePath,
-          args: [
-            '--disable-blink-features=AutomationControlled',
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-          ],
-        });
+        logger.warn('浏览器已断开，重新启动...');
+        browser = await launchBrowser(config, chromePath);
       }
 
       const result = await registerOne(browser, config, logger, totalAttempts);
 
       if (result) {
         successCount++;
-        logger.info(`\n✅ 进度: ${successCount}/${targetCount} 已完成`);
+        logger.info(`\n进度: ${successCount}/${targetCount} 已完成`);
       } else {
-        logger.info(`\n⚠️  第 ${totalAttempts} 次尝试失败，${successCount}/${targetCount}，继续重试...`);
+        logger.info(`\n第 ${totalAttempts} 次尝试失败，${successCount}/${targetCount}，继续重试...`);
       }
 
-      // 失败后快速进入下一次重试
       if (successCount < targetCount) {
         await randomDelay(1000, 2000);
       }
@@ -258,7 +241,6 @@ async function main() {
     if (browser.isConnected()) await browser.close();
   }
 
-  // 打印最终结果
   console.log(`
   ╔══════════════════════════════════════════╗
   ║              运行结束                    ║
@@ -267,14 +249,14 @@ async function main() {
   ║  成功注册数: ${String(successCount).padStart(3)}                        ║
   ║  目标数量:   ${String(targetCount).padStart(3)}                        ║
   ╠══════════════════════════════════════════╣
-  ║  📄 结果文件: emails.txt                 ║
-  ║  📋 运行日志: results/run.log            ║
+  ║  结果文件: emails.txt                   ║
+  ║  运行日志: results/run.log              ║
   ╚══════════════════════════════════════════╝
   `);
 }
 
 main().catch((error) => {
-  console.error(`\n❌ 程序异常退出: ${error.message}`);
+  console.error(`\n程序异常退出: ${error.message}`);
   console.error(error.stack);
   process.exit(1);
 });
