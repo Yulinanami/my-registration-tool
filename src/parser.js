@@ -1,6 +1,6 @@
 /**
  * 邮件解析模块
- * 从 OpenAI 验证邮件中提取验证链接或 OTP
+ * 从验证邮件中提取验证链接或 OTP
  */
 
 /**
@@ -30,12 +30,12 @@ function extractVerification(emailData) {
 }
 
 /**
- * 从 HTML/文本中提取 OpenAI 验证链接
+ * 从 HTML/文本中提取验证链接
  */
 function extractVerificationLink(content) {
   if (!content) return null;
 
-  // 匹配 OpenAI/ChatGPT 验证链接的多种模式
+  // 匹配验证链接的多种模式
   const patterns = [
     // href 属性中的链接
     /href=["'](https?:\/\/[^"']*(?:auth\.openai\.com|login\.chatgpt\.com|openai\.com\/verify|chatgpt\.com\/auth)[^"']*)/gi,
@@ -57,7 +57,7 @@ function extractVerificationLink(content) {
     }
   }
 
-  // 通用链接提取（如果发件人是 OpenAI）
+  // 通用链接提取
   const allLinks = content.match(/href=["'](https?:\/\/[^"']+)/gi);
   if (allLinks) {
     for (const linkMatch of allLinks) {

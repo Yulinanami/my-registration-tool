@@ -1,9 +1,9 @@
 /**
- * GPTMail 网页爬虫模块
+ * 网页爬虫模块
  * 通过 Playwright 从 mail.chatgpt.org.uk 获取临时邮箱并读取邮件
  */
 
-class GptMailScraper {
+class MailScraper {
   /**
    * @param {import('playwright').BrowserContext} context - Playwright 浏览器上下文
    * @param {import('winston').Logger} logger
@@ -16,7 +16,7 @@ class GptMailScraper {
   }
 
   /**
-   * 初始化：打开 GPTMail 页面
+   * 初始化：打开邮箱页面
    */
   async init() {
     this.page = await this.context.newPage();
@@ -30,7 +30,7 @@ class GptMailScraper {
     await this._dismissPopups();
     // 等待邮箱地址真正生成（包含 @ 符号）
     this.currentEmail = await this._waitForRealEmail();
-    this.logger.info(`[GPTMail] 初始化完成，当前邮箱: ${this.currentEmail}`);
+    this.logger.info(`[Mail] 初始化完成，当前邮箱: ${this.currentEmail}`);
     return this.currentEmail;
   }
 
@@ -38,7 +38,7 @@ class GptMailScraper {
    * 生成一个新的随机邮箱
    */
   async generateNewEmail() {
-    this.logger.info('[GPTMail] 生成新的随机邮箱...');
+    this.logger.info('[Mail] 生成新的随机邮箱...');
     // 点击随机生成按钮
     const btn = this.page.locator('button[onclick="generateNewEmail()"]');
     if (await btn.count() > 0) {
@@ -56,13 +56,13 @@ class GptMailScraper {
     this.currentEmail = await this._waitForRealEmail();
     // 如果邮箱没变，刷新页面重试
     if (this.currentEmail === oldEmail) {
-      this.logger.info('[GPTMail] 邮箱未变，刷新页面...');
+      this.logger.info('[Mail] 邮箱未变，刷新页面...');
       await this.page.reload({ waitUntil: 'domcontentloaded' });
       await this.page.waitForSelector('#emailDisplay', { timeout: 15000 });
       await this._dismissPopups();
       this.currentEmail = await this._waitForRealEmail();
     }
-    this.logger.info(`[GPTMail] 新邮箱: ${this.currentEmail}`);
+    this.logger.info(`[Mail] 新邮箱: ${this.currentEmail}`);
     return this.currentEmail;
   }
 
@@ -73,7 +73,7 @@ class GptMailScraper {
    * @returns {Promise<{subject: string, from: string, body: string, html: string}|null>}
    */
   async waitForVerificationEmail(pollInterval = 3000, timeout = 120000) {
-    this.logger.info(`[GPTMail] 开始轮询验证邮件，邮箱: ${this.currentEmail}，超时: ${timeout / 1000}s`);
+    this.logger.info(`[Mail] 开始轮询验证邮件，邮箱: ${this.currentEmail}，超时: ${timeout / 1000}s`);
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
@@ -91,7 +91,7 @@ class GptMailScraper {
           const item = emailItems.nth(i);
           const text = await item.textContent();
           if (text && (text.includes('OpenAI') || text.includes('openai') || text.includes('ChatGPT') || text.includes('verify'))) {
-            this.logger.info(`[GPTMail] 找到验证邮件: ${text.trim().substring(0, 80)}`);
+            this.logger.info(`[Mail] 找到验证邮件: ${text.trim().substring(0, 80)}`);
             // 点击打开邮件详情
             await item.click();
             await this.page.waitForTimeout(2000);
@@ -102,17 +102,17 @@ class GptMailScraper {
         }
       }
 
-      this.logger.info(`[GPTMail] 暂未收到验证邮件，${Math.round((Date.now() - startTime) / 1000)}s / ${timeout / 1000}s`);
+      this.logger.info(`[Mail] 暂未收到验证邮件，${Math.round((Date.now() - startTime) / 1000)}s / ${timeout / 1000}s`);
       await this.page.waitForTimeout(pollInterval);
     }
 
-    this.logger.warn(`[GPTMail] 验证邮件轮询超时 (${timeout / 1000}s)`);
+    this.logger.warn(`[Mail] 验证邮件轮询超时 (${timeout / 1000}s)`);
     return null;
   }
 
   /**
    * 等待真实邮箱地址生成（包含 @ 符号）
-   * GPTMail 页面加载时会先显示 "生成中..."，需要等待
+   * 邮箱页面加载时会先显示 "生成中..."，需要等待
    */
   async _waitForRealEmail(timeout = 15000) {
     const startTime = Date.now();
@@ -121,12 +121,12 @@ class GptMailScraper {
       if (text && text.includes('@')) {
         return text;
       }
-      this.logger.info(`[GPTMail] 等待邮箱生成... (当前: ${text})`);
+      this.logger.info(`[Mail] 等待邮箱生成... (当前: ${text})`);
       await this.page.waitForTimeout(1000);
     }
     // 超时后返回当前值
     const fallback = await this._readCurrentEmail();
-    this.logger.warn(`[GPTMail] 等待邮箱超时，当前值: ${fallback}`);
+    this.logger.warn(`[Mail] 等待邮箱超时，当前值: ${fallback}`);
     return fallback;
   }
 
@@ -138,7 +138,7 @@ class GptMailScraper {
       const emailText = await this.page.locator('#emailDisplay').textContent();
       return emailText ? emailText.trim() : null;
     } catch (e) {
-      this.logger.error(`[GPTMail] 读取邮箱地址失败: ${e.message}`);
+      this.logger.error(`[Mail] 读取邮箱地址失败: ${e.message}`);
       return null;
     }
   }
@@ -161,7 +161,7 @@ class GptMailScraper {
         }
       }
     } catch (e) {
-      this.logger.warn(`[GPTMail] 刷新收件箱失败: ${e.message}`);
+      this.logger.warn(`[Mail] 刷新收件箱失败: ${e.message}`);
     }
   }
 
@@ -210,7 +210,7 @@ class GptMailScraper {
 
       return { subject, from, body, html };
     } catch (e) {
-      this.logger.error(`[GPTMail] 读取邮件详情失败: ${e.message}`);
+      this.logger.error(`[Mail] 读取邮件详情失败: ${e.message}`);
       return null;
     }
   }
@@ -271,7 +271,7 @@ class GptMailScraper {
     });
     await this.page.waitForSelector('#emailDisplay', { timeout: 15000 });
     await this._dismissPopups();
-    this.logger.info(`[GPTMail] 已导航到邮箱: ${email}`);
+    this.logger.info(`[Mail] 已导航到邮箱: ${email}`);
   }
 
   /**
@@ -284,4 +284,4 @@ class GptMailScraper {
   }
 }
 
-module.exports = { GptMailScraper };
+module.exports = { MailScraper };

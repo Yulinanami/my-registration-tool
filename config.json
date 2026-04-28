@@ -1,5 +1,5 @@
 {
-  "chatgptPassword": "qwerasdfzxcv",
+  "password": "qwerasdfzxcv",
   "headless": false,
   "mailPollIntervalMs": 3000,
   "mailPollTimeoutMs": 120000,

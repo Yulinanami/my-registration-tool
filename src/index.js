@@ -1,9 +1,9 @@
 /**
- * ChatGPT 注册辅助器 — 主入口
+ * 注册辅助工具 — 主入口
  *
  * 流程：
  * 1. 控制台输入需要注册的数量 N
- * 2. 循环：GPTMail 获取邮箱 → ChatGPT 注册 → GPTMail 获取验证码 → 验证
+ * 2. 循环：Mail 获取邮箱 → 注册流程 → Mail 获取验证码 → 验证
  * 3. 成功的账号写入 emails.txt
  * 4. 失败则换邮箱重试，直到成功 N 个
  */
@@ -13,8 +13,8 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const winston = require('winston');
-const { GptMailScraper } = require('./gptmail-scraper');
-const { ChatGPTRegister, RegisterResult } = require('./chatgpt-register');
+const { MailScraper } = require('./scraper');
+const { Registrar, RegisterResult } = require('./registrar');
 
 // ============ 配置 ============
 
@@ -26,7 +26,7 @@ const LOG_PATH = path.join(LOG_DIR, 'run.log');
 
 function loadConfig() {
   const defaults = {
-    chatgptPassword: 'qwerasdfzxcv',
+    password: 'qwerasdfzxcv',
     headless: false,
     mailPollIntervalMs: 3000,
     mailPollTimeoutMs: 120000,
@@ -99,33 +99,33 @@ async function registerOne(browser, config, logger, attemptNum) {
   logger.info(`开始第 ${attemptNum} 次尝试注册`);
   logger.info('='.repeat(60));
 
-  // 创建 GPTMail 上下文（独立）
-  const gptmailContext = await browser.newContext({
+  // 创建 Mail 上下文（独立）
+  const mailContext = await browser.newContext({
     locale: 'zh-CN',
     viewport: { width: 1280, height: 720 },
   });
 
-  const scraper = new GptMailScraper(gptmailContext, logger);
+  const scraper = new MailScraper(mailContext, logger);
   let email = null;
   let success = false;
 
   try {
-    // Step 1: 从 GPTMail 获取临时邮箱
+    // Step 1: 从 Mail 获取临时邮箱
     email = await scraper.init();
     if (!email) {
-      logger.error('❌ 无法从 GPTMail 获取邮箱');
+      logger.error('❌ 无法获取邮箱');
       return false;
     }
     logger.info(`📧 获取到临时邮箱: ${email}`);
 
-    // Step 2: 用这个邮箱去 ChatGPT 注册
-    const chatgptContext = await browser.newContext({
+    // Step 2: 用这个邮箱去注册
+    const siteContext = await browser.newContext({
       locale: 'en-US',
       viewport: { width: 1280, height: 720 },
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     });
 
-    const registrar = new ChatGPTRegister(chatgptContext, config, logger);
+    const registrar = new Registrar(siteContext, config, logger);
 
     try {
       const regResult = await registrar.register(email);
@@ -161,8 +161,8 @@ async function registerOne(browser, config, logger, attemptNum) {
     }
 
     if (success) {
-      logger.info(`\n🎉 注册成功！邮箱: ${email}, 密码: ${config.chatgptPassword}`);
-      appendToEmailsFile(email, config.chatgptPassword);
+      logger.info(`\n🎉 注册成功！邮箱: ${email}, 密码: ${config.password}`);
+      appendToEmailsFile(email, config.password);
       logger.info(`📝 已写入 ${EMAILS_OUTPUT}`);
     }
 
@@ -172,7 +172,7 @@ async function registerOne(browser, config, logger, attemptNum) {
     return false;
   } finally {
     try { await scraper.close(); } catch (e) { /* ignore */ }
-    try { await gptmailContext.close(); } catch (e) { /* ignore */ }
+    try { await mailContext.close(); } catch (e) { /* ignore */ }
   }
 }
 
@@ -181,7 +181,7 @@ async function registerOne(browser, config, logger, attemptNum) {
 async function main() {
   console.log(`
   ╔══════════════════════════════════════════╗
-  ║      ChatGPT 注册辅助器 v1.0            ║
+  ║          注册辅助工具 v1.0               ║
   ║                                          ║
   ║  🖱️  鼠标优先 · 自动化注册 · 批量处理    ║
   ╚══════════════════════════════════════════╝
