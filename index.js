@@ -1,13 +1,14 @@
+// 程序入口，读取配置并启动批量注册
 const { chromium } = require('playwright');
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const winston = require('winston');
-const { MailScraper } = require('./scraper');
-const { Registrar, RegisterResult } = require('./registrar');
+const { MailScraper } = require('./src/scraper');
+const { Registrar, RegisterResult } = require('./src/registrar');
 
-const PROJECT_ROOT = path.resolve(__dirname, '..');
+const PROJECT_ROOT = path.resolve(__dirname);
 const CONFIG_PATH = path.join(PROJECT_ROOT, 'config.json');
 const EMAILS_OUTPUT = path.join(PROJECT_ROOT, 'emails.txt');
 const LOG_DIR = path.join(PROJECT_ROOT, 'results');

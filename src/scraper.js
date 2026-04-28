@@ -1,3 +1,4 @@
+// 打开临时邮箱页面并读取验证邮件
 const { extractVerification } = require('./parser');
 
 class MailScraper {

@@ -113,12 +113,12 @@ npm start
 直接指定数量：
 
 ```bash
-node src/index.js 3
+node index.js 3
 ```
 
 ## 项目结构
 
-- `src/index.js`: 程序入口和整体流程。
+- `index.js`: 程序入口和整体流程。
 - `src/registrar.js`: 注册页面处理。
 - `src/scraper.js`: 临时邮箱页面处理。
 - `src/parser.js`: 验证邮件内容读取。

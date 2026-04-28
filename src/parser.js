@@ -1,4 +1,4 @@
-// 从邮件里找验证内容
+// 从邮件内容里提取验证码或验证链接
 function extractVerification(emailData) {
   if (!emailData) return null;
 
