@@ -199,12 +199,18 @@ class Registrar {
 
   // 点击继续按钮
   async _clickContinueButton() {
-    const submitBtn = this.page.locator('button[type="submit"]');
-    if (await submitBtn.count() > 0 && await submitBtn.first().isVisible()) {
-      await submitBtn.first().click();
-      return true;
-    }
-
+    const targetTexts = [
+      '继续',
+      'Continue',
+      '下一步',
+      'Next',
+      'Finish creating account',
+      'Create account',
+      '完成创建账号',
+      '完成创建账户',
+      '创建账号',
+      '创建账户',
+    ];
     const allButtons = this.page.locator('button');
     const count = await allButtons.count();
     for (let i = 0; i < count; i++) {
@@ -213,7 +219,21 @@ class Registrar {
       if (text.includes('Google') || text.includes('Apple') || text.includes('Microsoft') || text.includes('手机')) {
         continue;
       }
-      if ((text === '继续' || text === 'Continue' || text === '下一步' || text === 'Next') && await btn.isVisible()) {
+      if (targetTexts.includes(text) && await btn.isVisible() && await btn.isEnabled()) {
+        await btn.click();
+        return true;
+      }
+    }
+
+    const submitBtn = this.page.locator('button[type="submit"]');
+    const submitCount = await submitBtn.count();
+    for (let i = 0; i < submitCount; i++) {
+      const btn = submitBtn.nth(i);
+      const text = (await btn.textContent() || '').trim();
+      if (text.includes('Google') || text.includes('Apple') || text.includes('Microsoft') || text.includes('手机')) {
+        continue;
+      }
+      if (await btn.isVisible() && await btn.isEnabled()) {
         await btn.click();
         return true;
       }
@@ -519,27 +539,7 @@ class Registrar {
         this.logger.info('[Registration] 已选择年份');
       }
 
-      const birthdayInput = this.page.locator('input[name="birthday"], input[name="birthdate"], input[name="dob"], input[type="date"]');
-      if (await birthdayInput.count() > 0) {
-        try {
-          const bdEl = birthdayInput.first();
-          if (await bdEl.isVisible()) {
-            const typeAttr = await bdEl.getAttribute('type');
-            if (typeAttr === 'date') {
-              await bdEl.fill('2000-01-15');
-            } else {
-              await bdEl.click();
-              await this.page.keyboard.press('Control+A');
-              await this.page.keyboard.press('Backspace');
-              await this.page.waitForTimeout(100);
-              await this._typeHumanLike(bdEl, '01/15/2000');
-            }
-            this.logger.info(`[Registration] 已填写生日 (${typeAttr || 'text'})`);
-          }
-        } catch (bdErr) {
-          this.logger.warn(`[Registration] 生日填写跳过: ${bdErr.message.substring(0, 60)}`);
-        }
-      }
+      await this._fillBirthday();
 
       const ageInput = this.page.locator('input[name="age"], input[placeholder*="age"], input[placeholder*="年龄"]');
       if (await ageInput.count() > 0) {
@@ -589,6 +589,58 @@ class Registrar {
     }
   }
 
+  // 填写生日
+  async _fillBirthday() {
+    const birthdayInput = await this._findBirthdayInput();
+    if (!birthdayInput) {
+      this.logger.warn('[Registration] 未找到生日输入框');
+      return false;
+    }
+
+    try {
+      const typeAttr = await birthdayInput.getAttribute('type');
+      await birthdayInput.click();
+
+      if (typeAttr === 'date') {
+        await birthdayInput.fill('2000-01-15');
+      } else {
+        await this.page.keyboard.press('Control+A');
+        await this.page.keyboard.press('Backspace');
+        await this.page.waitForTimeout(100);
+        await this._typeHumanLike(birthdayInput, '01/15/2000');
+      }
+
+      this.logger.info(`[Registration] 已填写生日 (${typeAttr || 'text'})`);
+      return true;
+    } catch (bdErr) {
+      this.logger.warn(`[Registration] 生日填写跳过: ${bdErr.message.substring(0, 60)}`);
+      return false;
+    }
+  }
+
+  // 查找生日输入框
+  async _findBirthdayInput() {
+    const locators = [
+      this.page.getByLabel('Birthday'),
+      this.page.getByLabel('生日'),
+      this.page.locator('input[name="birthday"], input[name="birthdate"], input[name="dob"], input[type="date"]'),
+      this.page.locator('input[name*="birth" i], input[id*="birth" i], input[placeholder*="birth" i], input[aria-label*="birth" i]'),
+      this.page.locator('input[placeholder*="生日"], input[aria-label*="生日"]'),
+    ];
+
+    for (const locator of locators) {
+      const count = await locator.count();
+      for (let i = 0; i < count; i++) {
+        const input = locator.nth(i);
+        if (await input.isVisible()) {
+          return input;
+        }
+      }
+    }
+
+    return null;
+  }
+
   // 检查个人信息页错误
   async _checkForAboutYouError() {
     try {
@@ -612,8 +664,19 @@ class Registrar {
   // 检查页面保护
   async _detectCloudflare() {
     try {
-      const cf = this.page.locator('iframe[src*="challenges.cloudflare.com"], #cf-challenge-running, .cf-turnstile');
-      return await cf.count() > 0;
+      const cf = this.page.locator(
+        'iframe[src*="challenges.cloudflare.com"], ' +
+        '#cf-challenge-running, ' +
+        '.cf-turnstile, ' +
+        'input[name="cf-turnstile-response"], ' +
+        '[id^="cf-chl-widget"]'
+      );
+      if (await cf.count() > 0) {
+        return true;
+      }
+
+      const title = await this.page.title();
+      return title.includes('请稍候') || title.toLowerCase().includes('just a moment');
     } catch (e) {
       return false;
     }
@@ -629,6 +692,8 @@ class Registrar {
         '.cf-turnstile, ' +
         '.g-recaptcha, ' +
         '.h-captcha, ' +
+        'input[name="cf-turnstile-response"], ' +
+        '[id^="cf-chl-widget"], ' +
         '#captcha-container'
       );
       return await captcha.count() > 0;

@@ -108,7 +108,7 @@ class MailScraper {
   // 读取邮件内容
   async _readEmailDetail() {
     try {
-      await this.page.waitForSelector('.email-detail-body, #emailDetailBody, .modal-body', { timeout: 5000 });
+      await this.page.waitForSelector('.email-detail-body, #emailDetailBody, #emailFrame, #emailModal, .modal-body', { timeout: 5000 });
 
       let body = '';
       let html = '';
