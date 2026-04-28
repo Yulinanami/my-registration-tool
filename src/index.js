@@ -156,8 +156,8 @@ async function registerOne(browser, config, logger, attemptNum) {
       }
       // 其它情况（CAPTCHA、域名被拒等）：不成功，外层会重试
     } finally {
-      await registrar.close();
-      await chatgptContext.close();
+      try { await registrar.close(); } catch (e) { /* ignore */ }
+      try { await chatgptContext.close(); } catch (e) { /* ignore */ }
     }
 
     if (success) {
@@ -171,8 +171,8 @@ async function registerOne(browser, config, logger, attemptNum) {
     logger.error(`❌ 注册过程异常: ${error.message}`);
     return false;
   } finally {
-    await scraper.close();
-    await gptmailContext.close();
+    try { await scraper.close(); } catch (e) { /* ignore */ }
+    try { await gptmailContext.close(); } catch (e) { /* ignore */ }
   }
 }
 
@@ -190,15 +190,21 @@ async function main() {
   const config = loadConfig();
   const logger = createLogger();
 
-  // 获取目标注册数量
-  const input = await askQuestion('📌 请输入需要注册的账号数量 (默认 1): ');
-  const targetCount = parseInt(input) || 1;
+  // 获取目标注册数量（支持命令行参数：node src/index.js 3）
+  let targetCount;
+  const cliArg = process.argv[2];
+  if (cliArg) {
+    targetCount = parseInt(cliArg) || 1;
+  } else {
+    const input = await askQuestion('📌 请输入需要注册的账号数量 (默认 1): ');
+    targetCount = parseInt(input) || 1;
+  }
   logger.info(`目标注册数量: ${targetCount}`);
 
   // 启动浏览器（使用系统已安装的 Chrome）
   const chromePath = config.chromePath || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
   logger.info(`🚀 启动浏览器: ${chromePath}`);
-  const browser = await chromium.launch({
+  let browser = await chromium.launch({
     headless: config.headless,
     executablePath: chromePath,
     args: [
@@ -220,6 +226,20 @@ async function main() {
         break;
       }
 
+      // 检查浏览器是否还活着，如果断开就重新启动
+      if (!browser.isConnected()) {
+        logger.warn('⚠️  浏览器已断开，重新启动...');
+        browser = await chromium.launch({
+          headless: config.headless,
+          executablePath: chromePath,
+          args: [
+            '--disable-blink-features=AutomationControlled',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+          ],
+        });
+      }
+
       const result = await registerOne(browser, config, logger, totalAttempts);
 
       if (result) {
@@ -237,7 +257,7 @@ async function main() {
       }
     }
   } finally {
-    await browser.close();
+    if (browser.isConnected()) await browser.close();
   }
 
   // 打印最终结果

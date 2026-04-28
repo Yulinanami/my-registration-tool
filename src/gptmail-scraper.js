@@ -28,7 +28,8 @@ class GptMailScraper {
     await this.page.waitForSelector('#emailDisplay', { timeout: 15000 });
     // 关闭可能出现的公告弹窗
     await this._dismissPopups();
-    this.currentEmail = await this._readCurrentEmail();
+    // 等待邮箱地址真正生成（包含 @ 符号）
+    this.currentEmail = await this._waitForRealEmail();
     this.logger.info(`[GPTMail] 初始化完成，当前邮箱: ${this.currentEmail}`);
     return this.currentEmail;
   }
@@ -52,14 +53,14 @@ class GptMailScraper {
     await this.page.waitForTimeout(2000);
     await this._dismissPopups();
     const oldEmail = this.currentEmail;
-    this.currentEmail = await this._readCurrentEmail();
+    this.currentEmail = await this._waitForRealEmail();
     // 如果邮箱没变，刷新页面重试
     if (this.currentEmail === oldEmail) {
       this.logger.info('[GPTMail] 邮箱未变，刷新页面...');
       await this.page.reload({ waitUntil: 'domcontentloaded' });
       await this.page.waitForSelector('#emailDisplay', { timeout: 15000 });
       await this._dismissPopups();
-      this.currentEmail = await this._readCurrentEmail();
+      this.currentEmail = await this._waitForRealEmail();
     }
     this.logger.info(`[GPTMail] 新邮箱: ${this.currentEmail}`);
     return this.currentEmail;
@@ -110,6 +111,26 @@ class GptMailScraper {
   }
 
   /**
+   * 等待真实邮箱地址生成（包含 @ 符号）
+   * GPTMail 页面加载时会先显示 "生成中..."，需要等待
+   */
+  async _waitForRealEmail(timeout = 15000) {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeout) {
+      const text = await this._readCurrentEmail();
+      if (text && text.includes('@')) {
+        return text;
+      }
+      this.logger.info(`[GPTMail] 等待邮箱生成... (当前: ${text})`);
+      await this.page.waitForTimeout(1000);
+    }
+    // 超时后返回当前值
+    const fallback = await this._readCurrentEmail();
+    this.logger.warn(`[GPTMail] 等待邮箱超时，当前值: ${fallback}`);
+    return fallback;
+  }
+
+  /**
    * 读取当前邮箱地址
    */
   async _readCurrentEmail() {
@@ -127,13 +148,15 @@ class GptMailScraper {
    */
   async _refreshInbox() {
     try {
+      // 先关闭可能遮挡的弹窗
+      await this._dismissPopups();
       const refreshBtn = this.page.locator('#refreshInboxBtn');
-      if (await refreshBtn.count() > 0) {
+      if (await refreshBtn.count() > 0 && await refreshBtn.first().isVisible()) {
         await refreshBtn.click();
       } else {
         // 备选：用其它可能的刷新按钮
         const altBtn = this.page.locator('button:has-text("刷新"), button:has-text("Refresh")');
-        if (await altBtn.count() > 0) {
+        if (await altBtn.count() > 0 && await altBtn.first().isVisible()) {
           await altBtn.first().click();
         }
       }
