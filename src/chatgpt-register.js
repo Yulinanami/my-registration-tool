@@ -49,7 +49,7 @@ class ChatGPTRegister {
         timeout: 60000,
       });
       // 等待页面稳定（Cloudflare 等）
-      await this.page.waitForTimeout(5000);
+      await this.page.waitForTimeout(2000);
 
       // 检查并等待 Cloudflare 挑战
       const cfUrl = this.page.url();
@@ -74,7 +74,7 @@ class ChatGPTRegister {
           return { result: RegisterResult.UNKNOWN_ERROR, message: '找不到注册按钮' };
         }
         // 等待导航完成
-        await this.page.waitForTimeout(5000);
+        await this.page.waitForTimeout(2000);
       }
 
       // Step 3: 等待邮箱输入框出现
@@ -375,7 +375,7 @@ class ChatGPTRegister {
    */
   async _checkRegistrationStatus() {
     try {
-      await this.page.waitForTimeout(5000);
+      await this.page.waitForTimeout(2000);
 
       const url = this.page.url();
 
@@ -477,7 +477,7 @@ class ChatGPTRegister {
       this.logger.info(`[ChatGPT] 打开验证链接: ${link.substring(0, 80)}...`);
       // 在当前页面打开验证链接
       await this.page.goto(link, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await this.page.waitForTimeout(5000);
+      await this.page.waitForTimeout(2000);
 
       const url = this.page.url();
       const pageText = await this.page.textContent('body');
@@ -536,7 +536,7 @@ class ChatGPTRegister {
           await submitBtn.first().click();
         }
 
-        await this.page.waitForTimeout(5000);
+        await this.page.waitForTimeout(2000);
 
         const url = this.page.url();
         if (url.includes('chatgpt.com') && !url.includes('auth')) {

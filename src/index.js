@@ -249,11 +249,9 @@ async function main() {
         logger.info(`\n⚠️  第 ${totalAttempts} 次尝试失败，${successCount}/${targetCount}，继续重试...`);
       }
 
-      // 尝试间隔，避免频率过高
+      // 失败后快速进入下一次重试
       if (successCount < targetCount) {
-        const waitTime = 5000 + Math.random() * 5000;
-        logger.info(`⏳ 等待 ${Math.round(waitTime / 1000)}s 后继续...`);
-        await randomDelay(waitTime, waitTime);
+        await randomDelay(1000, 2000);
       }
     }
   } finally {
