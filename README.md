@@ -16,7 +16,25 @@
 npm install
 ```
 
-如需安装 Playwright 浏览器：
+如需安装 Playwright Chromium 内核：
+
+```bash
+npm run install-browser
+```
+
+## 浏览器说明
+
+程序只使用 Chromium 内核，不会使用 Firefox 或 WebKit。启动时会尽量使用用户电脑里已有的 Chromium 内核浏览器，按顺序尝试：
+
+1. `config.json` 里的 `chromiumPath`
+2. 用 `where` 查找 Chrome、Edge、Brave、Opera、Vivaldi、Chromium
+3. Windows 注册表里的浏览器路径
+4. 系统常见安装位置里的浏览器路径
+5. Playwright 自带 Chromium
+
+Chrome、Edge、Brave、Opera、Vivaldi 都是 Chromium 内核，所以可以直接使用，不需要额外下载内核。
+
+如果以上方式都找不到可用内核，程序才会提示安装 Playwright Chromium 内核。安装命令：
 
 ```bash
 npm run install-browser
@@ -35,7 +53,7 @@ npm run install-browser
   "maxRetries": 20,
   "typingDelayMin": 50,
   "typingDelayMax": 150,
-  "chromePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+  "chromiumPath": "C:\\Program Files\\Chromium\\Application\\chrome.exe"
 }
 ```
 
@@ -48,7 +66,7 @@ npm run install-browser
 | `maxRetries` | 最多尝试次数 | `20` |
 | `typingDelayMin` | 每个字最短等待时间 | `50` |
 | `typingDelayMax` | 每个字最长等待时间 | `150` |
-| `chromePath` | 本地 Chrome 路径 | 系统默认路径 |
+| `chromiumPath` | 自定义 Chromium 路径，可不填 | 自动查找 |
 
 ## 运行
 
