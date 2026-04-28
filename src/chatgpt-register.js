@@ -765,11 +765,11 @@ class ChatGPTRegister {
    * 模拟人类输入（逐字输入带随机延迟）
    */
   async _typeHumanLike(locator, text) {
-    const { typingDelayMin = 50, typingDelayMax = 150 } = this.config;
-    for (const char of text) {
-      await locator.type(char, { delay: 0 });
-      const delay = Math.random() * (typingDelayMax - typingDelayMin) + typingDelayMin;
-      await this.page.waitForTimeout(delay);
+    const delay = Math.floor(Math.random() * 50) + 50; // 50-100ms 随机延迟
+    if (locator.pressSequentially) {
+      await locator.pressSequentially(text, { delay });
+    } else {
+      await locator.type(text, { delay });
     }
   }
 
