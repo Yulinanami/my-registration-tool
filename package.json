@@ -1,0 +1,14 @@
+{
+  "name": "chatgpt-registration-tool",
+  "version": "1.0.0",
+  "description": "ChatGPT 注册辅助器 - 使用 Playwright 自动化注册",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "install-browser": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0",
+    "winston": "^3.17.0"
+  }
+}

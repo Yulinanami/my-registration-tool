@@ -1,0 +1,11 @@
+{
+  "chatgptPassword": "qwerasdfzxcv",
+  "headless": false,
+  "mailPollIntervalMs": 3000,
+  "mailPollTimeoutMs": 120000,
+  "maxRetries": 20,
+  "typingDelayMin": 50,
+  "typingDelayMax": 150,
+  "stepDelayMin": 1000,
+  "stepDelayMax": 3000
+}
