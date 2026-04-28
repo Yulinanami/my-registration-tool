@@ -24,6 +24,7 @@ class BasePage {
         return true;
       }
 
+      if (this.page.isClosed()) return false;
       await this.page.waitForTimeout(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
     }
 
@@ -47,6 +48,7 @@ class BasePage {
         return null;
       }
 
+      if (this.page.isClosed()) return null;
       await this.page.waitForTimeout(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
     }
   }

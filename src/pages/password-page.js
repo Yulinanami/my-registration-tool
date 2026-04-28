@@ -101,7 +101,7 @@ class PasswordPage extends BasePage {
       }
 
       return false;
-    }, 5000, 300);
+    }, this.config.registrationStatusTimeoutMs || 5000, 300);
 
     return result;
   }
