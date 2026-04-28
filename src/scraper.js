@@ -1,8 +1,9 @@
 class MailScraper {
   // 保存浏览器和日志
-  constructor(context, logger) {
+  constructor(context, logger, config = {}) {
     this.context = context;
     this.logger = logger;
+    this.config = config;
     this.page = null;
     this.currentEmail = null;
   }
@@ -12,10 +13,10 @@ class MailScraper {
     this.page = await this.context.newPage();
     await this.page.goto('https://mail.chatgpt.org.uk', {
       waitUntil: 'domcontentloaded',
-      timeout: 30000,
+      timeout: this.config.mailPageTimeoutMs,
     });
 
-    await this.page.waitForSelector('#emailDisplay', { timeout: 15000 });
+    await this.page.waitForSelector('#emailDisplay', { timeout: this.config.mailEmailTimeoutMs });
     await this._dismissPopups();
     this.currentEmail = await this._waitForRealEmail();
     this.logger.info(`[Mail] 初始化完成，当前邮箱: ${this.currentEmail}`);
@@ -30,7 +31,7 @@ class MailScraper {
 
     while (Date.now() - startTime < timeout) {
       await this._refreshInbox();
-      await this.page.waitForTimeout(1500);
+      await this.page.waitForTimeout(this.config.mailRefreshWaitMs);
 
       const emailItems = this.page.locator('ul#emailList > li');
       const count = await emailItems.count();
@@ -42,7 +43,7 @@ class MailScraper {
           if (text && (text.includes('OpenAI') || text.includes('openai') || text.includes('ChatGPT') || text.includes('verify'))) {
             this.logger.info(`[Mail] 找到验证邮件: ${text.trim().substring(0, 80)}`);
             await item.click();
-            await this.page.waitForTimeout(2000);
+            await this.page.waitForTimeout(this.config.mailOpenWaitMs);
             return await this._readEmailDetail();
           }
         }
@@ -57,7 +58,7 @@ class MailScraper {
   }
 
   // 等待邮箱地址生成
-  async _waitForRealEmail(timeout = 15000) {
+  async _waitForRealEmail(timeout = this.config.mailEmailTimeoutMs) {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
@@ -66,7 +67,7 @@ class MailScraper {
         return text;
       }
       this.logger.info(`[Mail] 等待邮箱生成... (当前: ${text})`);
-      await this.page.waitForTimeout(1000);
+      await this.page.waitForTimeout(this.config.mailEmailCheckIntervalMs);
     }
 
     const fallback = await this._readCurrentEmail();
@@ -108,7 +109,7 @@ class MailScraper {
   // 读取邮件内容
   async _readEmailDetail() {
     try {
-      await this.page.waitForSelector('.email-detail-body, #emailDetailBody, #emailFrame, #emailModal, .modal-body', { timeout: 5000 });
+      await this.page.waitForSelector('.email-detail-body, #emailDetailBody, #emailFrame, #emailModal, .modal-body', { timeout: this.config.mailDetailTimeoutMs });
 
       let body = '';
       let html = '';
@@ -170,7 +171,7 @@ class MailScraper {
         const btn = this.page.locator(sel);
         if (await btn.count() > 0 && await btn.first().isVisible()) {
           await btn.first().click();
-          await this.page.waitForTimeout(500);
+          await this.page.waitForTimeout(this.config.popupCloseDelayMs);
         }
       }
     } catch (e) {}

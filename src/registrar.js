@@ -41,14 +41,15 @@ class Registrar {
         waitUntil: 'domcontentloaded',
         timeout: 60000,
       });
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(this.config.pageSettleDelayMs);
 
       const cfUrl = this.page.url();
       this.logger.info(`[Registration] 页面加载完成，URL: ${cfUrl}`);
       if (await this._detectCloudflare()) {
         this.logger.warn('[Registration] 检测到 Cloudflare 挑战，等待通过...');
-        for (let i = 0; i < 30; i++) {
-          await this.page.waitForTimeout(1000);
+        const checks = Math.ceil(this.config.cloudflareMaxWaitMs / this.config.cloudflareCheckIntervalMs);
+        for (let i = 0; i < checks; i++) {
+          await this.page.waitForTimeout(this.config.cloudflareCheckIntervalMs);
           if (!(await this._detectCloudflare())) break;
         }
         if (await this._detectCloudflare()) {
@@ -63,7 +64,7 @@ class Registrar {
         if (!signupClicked) {
           return { result: RegisterResult.UNKNOWN_ERROR, message: '找不到注册按钮' };
         }
-        await this.page.waitForTimeout(2000);
+        await this.page.waitForTimeout(this.config.pageSettleDelayMs);
       }
 
       this.logger.info('[Registration] 等待注册表单...');
@@ -73,7 +74,7 @@ class Registrar {
         this.logger.error(`[Registration] 邮箱输入框未出现，URL: ${this.page.url()}`);
         return { result: RegisterResult.UNKNOWN_ERROR, message: '注册表单加载失败' };
       }
-      await this._randomDelay(1000, 2000);
+      await this._randomDelay(this.config.stepDelayMin, this.config.stepDelayMax);
 
       const emailResult = await this._fillEmail(email);
       if (emailResult !== 'ok') {
@@ -89,7 +90,6 @@ class Registrar {
       if (passwordResult !== 'ok') {
         return { result: passwordResult, message: `密码填写失败: ${passwordResult}` };
       }
-      await this._randomDelay(2000, 4000);
 
       return await this._checkRegistrationStatus();
 
@@ -121,7 +121,7 @@ class Registrar {
   async _clickSignUp() {
 
     const url = this.page.url();
-    if (url.includes('auth.openai.com') || url.includes('log-in-or-create')) {
+    if (await this._isOnSignupForm()) {
       this.logger.info('[Registration] 已在注册表单页');
       return true;
     }
@@ -150,23 +150,48 @@ class Registrar {
                 el.first().click(),
               ]);
             } catch (navErr) {
-              await this.page.waitForTimeout(3000);
+              await this.page.waitForTimeout(this.config.navigationFallbackDelayMs);
             }
             this.logger.info(`[Registration] 点击注册按钮: ${desc}，当前 URL: ${this.page.url()}`);
-            return true;
+            if (await this._waitForSignupForm(this.config.signUpButtonTimeoutMs)) {
+              return true;
+            }
+            this.logger.warn(`[Registration] 点击 ${desc} 后未进入注册表单，继续尝试其它入口`);
           }
         }
       } catch (e) {  }
     }
 
-    await this.page.waitForTimeout(3000);
-    const newUrl = this.page.url();
-    if (newUrl.includes('auth.openai.com') || newUrl.includes('log-in-or-create')) {
+    await this.page.waitForTimeout(this.config.navigationFallbackDelayMs);
+    if (await this._isOnSignupForm()) {
       this.logger.info('[Registration] 页面已自动跳转到注册表单');
       return true;
     }
 
-    this.logger.error(`[Registration] 找不到注册按钮，当前 URL: ${newUrl}`);
+    this.logger.error(`[Registration] 找不到注册按钮，当前 URL: ${this.page.url()}`);
+    return false;
+  }
+
+  // 判断是否已经打开注册表单
+  async _isOnSignupForm() {
+    const url = this.page.url();
+    if (url.includes('auth.openai.com') || url.includes('log-in-or-create')) {
+      return true;
+    }
+
+    const emailInput = this.page.locator('input[name="email"], input[type="email"]');
+    return await emailInput.count() > 0 && await emailInput.first().isVisible();
+  }
+
+  // 等待注册表单出现
+  async _waitForSignupForm(timeoutMs) {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+      if (await this._isOnSignupForm()) {
+        return true;
+      }
+      await this.page.waitForTimeout(500);
+    }
     return false;
   }
 
@@ -182,7 +207,7 @@ class Registrar {
 
       this.logger.info(`[Registration] 已输入邮箱: ${email}`);
 
-      await this._randomDelay(500, 1500);
+      await this._randomDelay(this.config.shortDelayMin, this.config.shortDelayMax);
       const clicked = await this._clickContinueButton();
       if (!clicked) {
         this.logger.error('[Registration] 找不到继续按钮');
@@ -254,10 +279,26 @@ class Registrar {
     return '';
   }
 
+  // 判断是否已经创建失败
+  _isCreateAccountFailed(text) {
+    if (!text) {
+      return false;
+    }
+
+    return text.includes('failed to create account') ||
+      text.includes('sign up failed') ||
+      text.includes('registration failed') ||
+      text.includes('please try again') ||
+      text.includes('something went wrong') ||
+      text.includes('创建帐户失败') ||
+      text.includes('创建账户失败') ||
+      text.includes('注册失败');
+  }
+
   // 检查邮箱是否可用
   async _checkEmailStatus() {
     try {
-      await this.page.waitForTimeout(3000);
+      await this.page.waitForTimeout(this.config.navigationFallbackDelayMs);
 
       const pwdInput = this.page.locator('input[type="password"]');
       if (await pwdInput.count() > 0 && await pwdInput.first().isVisible()) {
@@ -291,7 +332,9 @@ class Registrar {
       }
 
       try {
-        await this.page.waitForSelector('input[type="password"]', { timeout: 10000 });
+        await this.page.waitForSelector('input[type="password"]', {
+          timeout: this.config.passwordInputTimeoutMs,
+        });
         this.logger.info('[Registration] 密码输入框延迟出现，邮箱通过');
         return 'ok';
       } catch (e) {
@@ -308,7 +351,10 @@ class Registrar {
   async _fillPassword() {
     try {
       const pwdInput = this.page.locator('input[type="password"], input[name="new-password"], input[name="password"]');
-      await pwdInput.first().waitFor({ state: 'visible', timeout: 10000 });
+      await pwdInput.first().waitFor({
+        state: 'visible',
+        timeout: this.config.passwordInputTimeoutMs,
+      });
 
       await pwdInput.first().click();
       await pwdInput.first().fill('');
@@ -316,7 +362,7 @@ class Registrar {
 
       this.logger.info('[Registration] 已输入密码');
 
-      await this._randomDelay(500, 1500);
+      await this._randomDelay(this.config.shortDelayMin, this.config.shortDelayMax);
 
       const clicked = await this._clickContinueButton();
       if (!clicked) {
@@ -335,64 +381,72 @@ class Registrar {
   // 检查注册结果
   async _checkRegistrationStatus() {
     try {
-      await this.page.waitForTimeout(2000);
+      const deadline = Date.now() + this.config.registrationStatusTimeoutMs;
+      let lastUrl = this.page.url();
 
-      const url = this.page.url();
+      while (Date.now() <= deadline) {
+        const url = this.page.url();
+        lastUrl = url;
 
-      if (url.includes('chatgpt.com') && !url.includes('auth') && !url.includes('login')) {
-        this.logger.info('[Registration] 注册成功（已进入主界面）');
-        return { result: RegisterResult.SUCCESS, message: '注册成功' };
-      }
+        if (url.includes('chatgpt.com') && !url.includes('auth') && !url.includes('login')) {
+          this.logger.info('[Registration] 注册成功（已进入主界面）');
+          return { result: RegisterResult.SUCCESS, message: '注册成功' };
+        }
 
-      const errorText = await this._readFirstErrorText(['.c3b92929b']);
+        const errorText = await this._readFirstErrorText(['.c3b92929b']);
 
-      if (errorText) {
-        if (errorText.includes('sign up failed') || errorText.includes('创建帐户失败') ||
-            errorText.includes('创建账户失败') || errorText.includes('registration failed')) {
-          this.logger.warn(`[Registration] 创建账户失败，需要换邮箱: ${errorText}`);
-          return { result: RegisterResult.DOMAIN_REJECTED, message: `创建账户失败: ${errorText}` };
+        if (errorText) {
+          if (this._isCreateAccountFailed(errorText)) {
+            this.logger.warn(`[Registration] 创建账户失败，需要换邮箱: ${errorText}`);
+            return { result: RegisterResult.DOMAIN_REJECTED, message: `创建账户失败: ${errorText}` };
+          }
+        }
+
+        const pageText = await this.page.textContent('body');
+        const lowerText = (pageText || '').toLowerCase();
+        if (this._isCreateAccountFailed(lowerText)) {
+          this.logger.warn('[Registration] 创建账户失败（全文检测），需要换邮箱');
+          return { result: RegisterResult.DOMAIN_REJECTED, message: '创建账户失败，请重试' };
+        }
+
+        if (lowerText.includes('verify your email') || lowerText.includes('验证你的邮箱') ||
+            lowerText.includes('check your email') || lowerText.includes('查看你的邮箱') ||
+            lowerText.includes('check your inbox') || lowerText.includes('查看邮箱') ||
+            lowerText.includes('we sent') || lowerText.includes('已发送') ||
+            lowerText.includes('verification email') || lowerText.includes('验证邮件')) {
+          this.logger.info('[Registration] 需要邮箱验证');
+          return { result: RegisterResult.NEED_VERIFICATION, message: '需要邮箱验证' };
+        }
+
+        if ((url.includes('onboarding') || url.includes('about_you') ||
+            lowerText.includes('tell us about you') ||
+            lowerText.includes('what should we call you') ||
+            lowerText.includes("let's confirm your age") ||
+            lowerText.includes('birthday')) && !url.includes('password')) {
+          const fillSuccess = await this._fillPersonalInfo();
+          if (!fillSuccess) {
+            return { result: RegisterResult.DOMAIN_REJECTED, message: '个人信息提交失败 (unsupported_email)' };
+          }
+          return { result: RegisterResult.SUCCESS, message: '注册成功（已填写个人信息）' };
+        }
+
+        if (await this._detectCaptcha()) {
+          return { result: RegisterResult.CAPTCHA, message: 'CAPTCHA 验证' };
+        }
+
+        if (lowerText.includes('phone number') || lowerText.includes('手机号') ||
+            lowerText.includes('verify your phone') || lowerText.includes('验证你的手机')) {
+          return { result: RegisterResult.PHONE_REQUIRED, message: '需要手机验证' };
+        }
+
+        if (Date.now() <= deadline) {
+          await this.page.waitForTimeout(this.config.statusCheckIntervalMs);
         }
       }
 
-      const pageText = await this.page.textContent('body');
-      const lowerText = pageText.toLowerCase();
-      if (lowerText.includes('sign up failed') || lowerText.includes('创建帐户失败') ||
-          lowerText.includes('创建账户失败') || lowerText.includes('注册失败')) {
-        this.logger.warn('[Registration] 创建账户失败（全文检测），需要换邮箱');
-        return { result: RegisterResult.DOMAIN_REJECTED, message: '创建账户失败，请重试' };
-      }
+      this.logger.warn(`[Registration] 注册状态不明确，URL: ${lastUrl}`);
 
-      if (lowerText.includes('verify your email') || lowerText.includes('验证你的邮箱') ||
-          lowerText.includes('check your email') || lowerText.includes('查看你的邮箱') ||
-          lowerText.includes('check your inbox') || lowerText.includes('查看邮箱') ||
-          lowerText.includes('we sent') || lowerText.includes('已发送') ||
-          lowerText.includes('verification email') || lowerText.includes('验证邮件')) {
-        this.logger.info('[Registration] 需要邮箱验证');
-        return { result: RegisterResult.NEED_VERIFICATION, message: '需要邮箱验证' };
-      }
-
-      if (url.includes('onboarding') || url.includes('about_you') ||
-          lowerText.includes('tell us about you') ||
-          lowerText.includes('what should we call you')) {
-        const fillSuccess = await this._fillPersonalInfo();
-        if (!fillSuccess) {
-          return { result: RegisterResult.DOMAIN_REJECTED, message: '个人信息提交失败 (unsupported_email)' };
-        }
-        return { result: RegisterResult.SUCCESS, message: '注册成功（已填写个人信息）' };
-      }
-
-      if (await this._detectCaptcha()) {
-        return { result: RegisterResult.CAPTCHA, message: 'CAPTCHA 验证' };
-      }
-
-      if (lowerText.includes('phone number') || lowerText.includes('手机号') ||
-          lowerText.includes('verify your phone') || lowerText.includes('验证你的手机')) {
-        return { result: RegisterResult.PHONE_REQUIRED, message: '需要手机验证' };
-      }
-
-      this.logger.warn(`[Registration] 注册状态不明确，URL: ${url}`);
-
-      if (url.includes('password') || url.includes('create-account')) {
+      if (lastUrl.includes('password') || lastUrl.includes('create-account')) {
         this.logger.warn('[Registration] 仍在密码/创建账号页面，判定为创建账户失败');
         return { result: RegisterResult.DOMAIN_REJECTED, message: '创建账户失败（页面未跳转）' };
       }
@@ -409,7 +463,7 @@ class Registrar {
     try {
       this.logger.info(`[Registration] 打开验证链接: ${link.substring(0, 80)}...`);
       await this.page.goto(link, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(this.config.pageSettleDelayMs);
 
       const url = this.page.url();
       const pageText = await this.page.textContent('body');
@@ -454,14 +508,14 @@ class Registrar {
       if (await otpInput.count() > 0) {
         await otpInput.first().click();
         await this._typeHumanLike(otpInput.first(), otp);
-        await this._randomDelay(500, 1000);
+        await this._randomDelay(this.config.shortDelayMin, this.config.shortDelayMax);
 
         const submitBtn = this.page.locator('button[type="submit"], button:has-text("Continue"), button:has-text("继续"), button:has-text("Verify"), button:has-text("验证")');
         if (await submitBtn.count() > 0) {
           await submitBtn.first().click();
         }
 
-        await this.page.waitForTimeout(2000);
+        await this.page.waitForTimeout(this.config.pageSettleDelayMs);
 
         const url = this.page.url();
         if (url.includes('chatgpt.com') && !url.includes('auth')) {
@@ -507,19 +561,19 @@ class Registrar {
   async _fillPersonalInfo() {
     try {
       this.logger.info('[Registration] 尝试填写个人信息...');
-      await this.page.waitForTimeout(2000);
+      await this.page.waitForTimeout(this.config.pageSettleDelayMs);
 
       const nameInput = this.page.locator('input[name="name"], input[name="firstName"], input[name="first_name"], input[placeholder*="name"], input[placeholder*="姓名"]');
       if (await nameInput.count() > 0 && await nameInput.first().isVisible()) {
         await nameInput.first().fill('');
-        await this._typeHumanLike(nameInput.first(), 'John');
+        await this._typeHumanLike(nameInput.first(), this.config.firstName);
         this.logger.info('[Registration] 已填写名字');
       }
 
       const lastNameInput = this.page.locator('input[name="lastName"], input[name="last_name"]');
       if (await lastNameInput.count() > 0 && await lastNameInput.first().isVisible()) {
         await lastNameInput.first().fill('');
-        await this._typeHumanLike(lastNameInput.first(), 'Doe');
+        await this._typeHumanLike(lastNameInput.first(), this.config.lastName);
         this.logger.info('[Registration] 已填写姓');
       }
 
@@ -535,7 +589,7 @@ class Registrar {
       }
       const yearSelect = this.page.locator('select[name*="year"], select[id*="year"]');
       if (await yearSelect.count() > 0 && await yearSelect.first().isVisible()) {
-        await yearSelect.first().selectOption('2000');
+        await yearSelect.first().selectOption(this.config.birthdayDate.slice(0, 4));
         this.logger.info('[Registration] 已选择年份');
       }
 
@@ -547,22 +601,22 @@ class Registrar {
           const ageEl = ageInput.first();
           if (await ageEl.isVisible()) {
             await ageEl.fill('');
-            await this._typeHumanLike(ageEl, '25');
-            this.logger.info('[Registration] 已填写年龄 (25岁)');
+            await this._typeHumanLike(ageEl, this.config.age);
+            this.logger.info(`[Registration] 已填写年龄 (${this.config.age}岁)`);
           }
         } catch (ageErr) {
           this.logger.warn(`[Registration] 年龄填写跳过: ${ageErr.message.substring(0, 60)}`);
         }
       }
 
-      await this._randomDelay(500, 1500);
+      await this._randomDelay(this.config.shortDelayMin, this.config.shortDelayMax);
       const clicked = await this._clickContinueButton();
       if (clicked) {
         this.logger.info('[Registration] 已提交个人信息');
       }
 
       for (let i = 0; i < 15; i++) {
-        await this.page.waitForTimeout(2000);
+        await this.page.waitForTimeout(this.config.statusCheckIntervalMs);
         const url = this.page.url();
 
         if (url.includes('chatgpt.com') && !url.includes('auth') && !url.includes('login')) {
@@ -602,12 +656,12 @@ class Registrar {
       await birthdayInput.click();
 
       if (typeAttr === 'date') {
-        await birthdayInput.fill('2000-01-15');
+        await birthdayInput.fill(this.config.birthdayDate);
       } else {
         await this.page.keyboard.press('Control+A');
         await this.page.keyboard.press('Backspace');
-        await this.page.waitForTimeout(100);
-        await this._typeHumanLike(birthdayInput, '01/15/2000');
+        await this.page.waitForTimeout(this.config.inputClearDelayMs || 100);
+        await this._typeHumanLike(birthdayInput, this.config.birthdayText);
       }
 
       this.logger.info(`[Registration] 已填写生日 (${typeAttr || 'text'})`);

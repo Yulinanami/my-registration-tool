@@ -51,8 +51,37 @@ npm run install-browser
   "mailPollIntervalMs": 3000,
   "mailPollTimeoutMs": 120000,
   "maxRetries": 20,
-  "typingDelayMin": 50,
-  "typingDelayMax": 150,
+  "typingDelayMin": 15,
+  "typingDelayMax": 40,
+  "shortDelayMin": 300,
+  "shortDelayMax": 800,
+  "stepDelayMin": 800,
+  "stepDelayMax": 1500,
+  "submitDelayMin": 4000,
+  "submitDelayMax": 6000,
+  "retryDelayMin": 800,
+  "retryDelayMax": 1500,
+  "pageSettleDelayMs": 1500,
+  "navigationFallbackDelayMs": 3000,
+  "statusCheckIntervalMs": 1500,
+  "signUpButtonTimeoutMs": 10000,
+  "registrationStatusTimeoutMs": 15000,
+  "cloudflareCheckIntervalMs": 1000,
+  "cloudflareMaxWaitMs": 30000,
+  "mailPageTimeoutMs": 30000,
+  "mailEmailTimeoutMs": 15000,
+  "mailEmailCheckIntervalMs": 1000,
+  "mailRefreshWaitMs": 800,
+  "mailOpenWaitMs": 1000,
+  "mailDetailTimeoutMs": 5000,
+  "popupCloseDelayMs": 200,
+  "inputClearDelayMs": 100,
+  "passwordInputTimeoutMs": 20000,
+  "firstName": "John",
+  "lastName": "Doe",
+  "birthdayText": "01/15/2000",
+  "birthdayDate": "2000-01-15",
+  "age": "25",
   "chromiumPath": "C:\\Program Files\\Chromium\\Application\\chrome.exe"
 }
 ```
@@ -61,11 +90,27 @@ npm run install-browser
 | :--- | :--- | :--- |
 | `password` | 注册时使用的密码 | `qwerasdfzxcv` |
 | `headless` | 是否隐藏浏览器窗口 | `false` |
-| `mailPollIntervalMs` | 查看验证邮件的间隔 | `3000` |
-| `mailPollTimeoutMs` | 等待验证邮件的最长时间 | `120000` |
 | `maxRetries` | 最多尝试次数 | `20` |
-| `typingDelayMin` | 每个字最短等待时间 | `50` |
-| `typingDelayMax` | 每个字最长等待时间 | `150` |
+| `typingDelayMin` / `typingDelayMax` | 每个字的输入间隔 | `15` / `40` |
+| `shortDelayMin` / `shortDelayMax` | 点按钮前后的短等待 | `300` / `800` |
+| `stepDelayMin` / `stepDelayMax` | 主要步骤之间的等待 | `800` / `1500` |
+| `submitDelayMin` / `submitDelayMax` | 提交密码后的等待 | `4000` / `6000` |
+| `retryDelayMin` / `retryDelayMax` | 失败重试前的等待 | `800` / `1500` |
+| `pageSettleDelayMs` | 页面加载后的固定等待 | `1500` |
+| `navigationFallbackDelayMs` | 点击后没跳转时的等待 | `3000` |
+| `statusCheckIntervalMs` | 检查注册结果的间隔 | `1500` |
+| `signUpButtonTimeoutMs` | 等待注册入口打开的上限 | `10000` |
+| `registrationStatusTimeoutMs` | 提交密码后等待结果的上限 | `15000` |
+| `cloudflareCheckIntervalMs` / `cloudflareMaxWaitMs` | 等待页面保护的间隔和上限 | `1000` / `30000` |
+| `mailPollIntervalMs` / `mailPollTimeoutMs` | 查看验证邮件的间隔和上限 | `3000` / `120000` |
+| `mailPageTimeoutMs` / `mailEmailTimeoutMs` | 邮箱页面和邮箱地址等待上限 | `30000` / `15000` |
+| `mailRefreshWaitMs` / `mailOpenWaitMs` / `mailDetailTimeoutMs` | 邮箱刷新、打开邮件、读取详情等待 | `800` / `1000` / `5000` |
+| `popupCloseDelayMs` | 关闭弹窗后的等待 | `200` |
+| `inputClearDelayMs` | 清空输入框后的等待 | `100` |
+| `passwordInputTimeoutMs` | 等待密码框的上限 | `20000` |
+| `firstName` / `lastName` | 自动填写的姓名 | `John` / `Doe` |
+| `birthdayText` / `birthdayDate` | 文本生日和日期框生日 | `01/15/2000` / `2000-01-15` |
+| `age` | 自动填写的年龄 | `25` |
 | `chromiumPath` | 自定义 Chromium 路径，可不填 | 自动查找 |
 
 ## 运行

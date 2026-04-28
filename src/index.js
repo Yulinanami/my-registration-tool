@@ -28,6 +28,35 @@ function loadConfig() {
     maxRetries: 20,
     typingDelayMin: 50,
     typingDelayMax: 150,
+    shortDelayMin: 500,
+    shortDelayMax: 1500,
+    stepDelayMin: 1000,
+    stepDelayMax: 2000,
+    submitDelayMin: 2000,
+    submitDelayMax: 4000,
+    retryDelayMin: 1000,
+    retryDelayMax: 2000,
+    pageSettleDelayMs: 2000,
+    navigationFallbackDelayMs: 3000,
+    statusCheckIntervalMs: 2000,
+    signUpButtonTimeoutMs: 10000,
+    registrationStatusTimeoutMs: 15000,
+    cloudflareCheckIntervalMs: 1000,
+    cloudflareMaxWaitMs: 30000,
+    mailPageTimeoutMs: 30000,
+    mailEmailTimeoutMs: 15000,
+    mailEmailCheckIntervalMs: 1000,
+    mailRefreshWaitMs: 1500,
+    mailOpenWaitMs: 2000,
+    mailDetailTimeoutMs: 5000,
+    popupCloseDelayMs: 500,
+    inputClearDelayMs: 100,
+    passwordInputTimeoutMs: 20000,
+    firstName: 'John',
+    lastName: 'Doe',
+    birthdayText: '01/15/2000',
+    birthdayDate: '2000-01-15',
+    age: '25',
   };
 
   try {
@@ -277,7 +306,7 @@ async function registerOne(browser, config, logger, attemptNum) {
     viewport: { width: 1280, height: 720 },
   });
 
-  const scraper = new MailScraper(mailContext, logger);
+  const scraper = new MailScraper(mailContext, logger, config);
   let email = null;
   let success = false;
 
@@ -402,7 +431,7 @@ async function main() {
       }
 
       if (successCount < targetCount) {
-        await randomDelay(1000, 2000);
+        await randomDelay(config.retryDelayMin, config.retryDelayMax);
       }
     }
   } finally {
