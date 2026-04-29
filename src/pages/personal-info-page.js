@@ -193,10 +193,12 @@ class PersonalInfoPage extends BasePage {
     try {
       const ageText = String(this.config.age || '25');
       const age = Number(ageText);
-      const min = Number(await ageInput.getAttribute('min'));
-      const max = Number(await ageInput.getAttribute('max'));
+      const minAttr = await ageInput.getAttribute('min');
+      const maxAttr = await ageInput.getAttribute('max');
+      const min = minAttr !== null ? Number(minAttr) : NaN;
+      const max = maxAttr !== null ? Number(maxAttr) : NaN;
       if ((Number.isFinite(min) && age < min) || (Number.isFinite(max) && age > max)) {
-        this.logger.warn(`[Registration] 年龄不在页面允许范围内: ${ageText}`);
+        this.logger.warn(`[Registration] 年龄不在页面允许范围内: ${ageText} (限制: ${minAttr || '无'}-${maxAttr || '无'})`);
         return false;
       }
 
@@ -269,7 +271,8 @@ class PersonalInfoPage extends BasePage {
 
     try {
       const typeAttr = await birthdayInput.getAttribute('type');
-      await birthdayInput.click();
+      await birthdayInput.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
+      await birthdayInput.click({ force: true, timeout: 5000 }).catch(() => {});
 
       if (typeAttr === 'date') {
         const filled = await this.fillInputAndConfirm(birthdayInput, this.config.birthdayDate, '生日', { direct: true });
