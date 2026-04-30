@@ -56,7 +56,7 @@ class BasePage {
   // 填入内容并确认没有被页面清空
   async fillInputAndConfirm(locator, value, label, options = {}) {
     const text = String(value || '');
-    const timeoutMs = options.timeoutMs || 3000;
+    const timeoutMs = options.timeoutMs || 5000;
 
     for (let attempt = 1; attempt <= 2; attempt++) {
       await locator.waitFor({ state: 'visible', timeout: timeoutMs });
@@ -77,7 +77,7 @@ class BasePage {
 
       this.logger.warn(`[Registration] ${label}输入后没有留在输入框内，重新填写`);
       await locator.fill(text).catch(() => {});
-      if (await this.waitForInputValue(locator, text, 1000)) {
+      if (await this.waitForInputValue(locator, text, 1800)) {
         return true;
       }
     }

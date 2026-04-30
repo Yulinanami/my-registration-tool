@@ -53,7 +53,7 @@ class VerificationPage extends BasePage {
   async handleOTP(otp) {
     try {
       this.logger.info(`[Registration] 输入 OTP: ${otp}`);
-      const otpInput = await this.findOTPInput(5000);
+      const otpInput = await this.findOTPInput(8000);
       if (otpInput) {
         const otpFilled = await this.fillInputAndConfirm(otpInput, otp, 'OTP');
         if (!otpFilled) {
@@ -69,6 +69,7 @@ class VerificationPage extends BasePage {
 
           const submitStatus = await this.waitForOTPSubmitResult();
           if (submitStatus === 'ok') {
+            await this.waitForKnownAuthState(8000);
             break;
           }
 
@@ -172,12 +173,13 @@ class VerificationPage extends BasePage {
         return true;
       }
       return false;
-    }, 5000, 250);
+    }, 8000, 250);
   }
 
   // 等待 OTP 提交后的页面变化
   async waitForOTPSubmitResult() {
     let result = 'no_change';
+    const beforeUrl = this.page.url();
     await this.waitUntil(async () => {
       const url = this.page.url();
       const lowerText = await this.readVisibleBodyText();
@@ -189,13 +191,18 @@ class VerificationPage extends BasePage {
         return true;
       }
 
+      if (url !== beforeUrl) {
+        result = 'ok';
+        return true;
+      }
+
       if (!(await this.findOTPInput())) {
         result = 'ok';
         return true;
       }
 
       return false;
-    }, 5000, 300);
+    }, 14000, 300);
 
     return result;
   }

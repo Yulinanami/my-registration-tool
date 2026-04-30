@@ -95,11 +95,25 @@ class MailScraper {
   // 等待邮箱地址生成
   async _waitForRealEmail(timeout = this.config.mailEmailTimeoutMs) {
     const startTime = Date.now();
+    let lastValidEmail = null;
+    let stableCount = 0;
 
     while (Date.now() - startTime < timeout) {
       const text = await this._readCurrentEmail();
       if (this._isValidEmail(text)) {
-        return text;
+        if (text === lastValidEmail) {
+          stableCount += 1;
+        } else {
+          lastValidEmail = text;
+          stableCount = 1;
+        }
+
+        if (stableCount >= 2) {
+          return text;
+        }
+      } else {
+        lastValidEmail = null;
+        stableCount = 0;
       }
       this.logger.info(`[Mail] 等待邮箱生成... (当前: ${text})`);
       await this.page.waitForTimeout(this.config.mailEmailCheckIntervalMs);
@@ -112,7 +126,7 @@ class MailScraper {
 
   // 判断邮箱地址是否完整
   _isValidEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '');
+    return /^[^\s@]+@(?:[^\s@.]+\.)+[^\s@.]{2,}$/.test(email || '');
   }
 
   // 读取当前邮箱地址

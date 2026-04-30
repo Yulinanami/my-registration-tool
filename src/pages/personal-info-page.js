@@ -320,6 +320,14 @@ class PersonalInfoPage extends BasePage {
       const url = this.page.url();
       const lowerText = await this.readVisibleBodyText();
 
+      if (
+        lowerText.includes("we can't create your account") &&
+        lowerText.includes('terms of use')
+      ) {
+        this.logger.warn(`[Registration] 个人信息页命中 Terms of Use 拒绝，URL: ${url}`);
+        return true;
+      }
+
       if (lowerText.includes('糟糕') || lowerText.includes('出错了') ||
           lowerText.includes('unsupported_email') || lowerText.includes('unsupported email') ||
           lowerText.includes('验证过程中出错') || this.isCreateAccountFailed(lowerText)) {

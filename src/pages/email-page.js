@@ -7,9 +7,9 @@ class EmailPage extends BasePage {
   async fill(email) {
     try {
       for (let attempt = 1; attempt <= 2; attempt++) {
-        const filled = await this.fillEmailInput(email, attempt === 1 ? 5000 : 1200);
+        const filled = await this.fillEmailInput(email, attempt === 1 ? 5000 : 2500);
         if (!filled) {
-          if (await this.findPasswordInput(500)) {
+          if (await this.findPasswordInput(1000)) {
             return 'ok';
           }
 
@@ -39,7 +39,7 @@ class EmailPage extends BasePage {
           return submitResult;
         }
 
-        const emailInput = await this.findEmailInput(500);
+        const emailInput = await this.findEmailInput(1200);
         if (!emailInput) {
           this.logger.warn('[Registration] 邮箱提交后正在跳转或重绘，未再强等邮箱框');
           continue;
@@ -72,6 +72,17 @@ class EmailPage extends BasePage {
         return true;
       }
 
+      const url = this.page.url().toLowerCase();
+      const bodyText = await this.readVisibleBodyText();
+      if (
+        url.includes('email-verification') ||
+        bodyText.includes('check your inbox') ||
+        bodyText.includes('enter the verification code')
+      ) {
+        result = RegisterResult.NEED_VERIFICATION;
+        return true;
+      }
+
       const errorText = await this.readFirstErrorText();
       const emailError = this.classifyEmailError(errorText);
       if (emailError) {
@@ -85,7 +96,7 @@ class EmailPage extends BasePage {
       }
 
       return false;
-    }, Math.min(this.config.passwordInputTimeoutMs || 10000, 10000), 250);
+    }, this.config.passwordInputTimeoutMs || 10000, 250);
 
     return result;
   }

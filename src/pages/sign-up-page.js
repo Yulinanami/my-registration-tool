@@ -39,7 +39,7 @@ class SignUpPage extends BasePage {
 
             const beforeUrl = this.page.url();
             try {
-              await button.click({ timeout: 2000 });
+              await button.click({ timeout: 3500 });
             } catch (clickErr) {
               continue;
             }
