@@ -8,6 +8,7 @@ const { getDatabase, closeDatabase } = require('./src/db');
 const { AccountStore } = require('./src/services/account-store');
 const { startScheduler } = require('./src/scheduler');
 const { acquireLock, releaseLock } = require('./src/services/lock-file');
+const { startApiServer } = require('./src/api/server');
 
 const PROJECT_ROOT = path.resolve(__dirname);
 const CONFIG_PATH = path.join(PROJECT_ROOT, 'config.json');
@@ -28,6 +29,8 @@ function loadConfig() {
     headless: false,
     accountStorePath: 'data/accounts.sqlite',
     lockFilePath: 'runtime/app.lock',
+    apiHost: '127.0.0.1',
+    apiPort: 3000,
     targetAccounts: 10,
     checkIntervalMinutes: 30,
     replenishDelayMs: 3000,
@@ -293,6 +296,7 @@ async function main() {
   acquireLock(lockPath, logger);
 
   let browser = null;
+  let httpServer = null;
   try {
     const dbPath = path.isAbsolute(config.accountStorePath)
       ? config.accountStorePath
@@ -327,8 +331,25 @@ async function main() {
     process.on('SIGINT', () => onSignal('SIGINT'));
     process.on('SIGTERM', () => onSignal('SIGTERM'));
 
-    await startScheduler({ store, config, logger, getBrowser, shouldStop });
+    // 启动调度器 (返回主循环 Promise + API controller)
+    const { mainLoopPromise, controller } = startScheduler({ store, config, logger, getBrowser, shouldStop });
+
+    // 启动 HTTP 服务 (前端 + API)
+    httpServer = await startApiServer({
+      store,
+      config,
+      logger,
+      controller,
+      projectRoot: PROJECT_ROOT,
+      host: config.apiHost,
+      port: config.apiPort,
+    });
+
+    await mainLoopPromise;
   } finally {
+    if (httpServer) {
+      try { await new Promise((resolve) => httpServer.close(resolve)); } catch (e) {}
+    }
     if (browser && browser.isConnected()) {
       try { await browser.close(); } catch (e) {}
     }

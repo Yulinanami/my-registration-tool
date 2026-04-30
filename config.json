@@ -3,6 +3,8 @@
   "headless": false,
   "accountStorePath": "data/accounts.sqlite",
   "lockFilePath": "runtime/app.lock",
+  "apiHost": "127.0.0.1",
+  "apiPort": 3000,
   "targetAccounts": 10,
   "checkIntervalMinutes": 30,
   "replenishDelayMs": 3000,

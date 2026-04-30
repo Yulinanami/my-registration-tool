@@ -5,10 +5,15 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "install-browser": "npx playwright install chromium"
+    "install-browser": "npx playwright install chromium",
+    "web:install": "cd web && npm install",
+    "web:dev": "cd web && npm run dev",
+    "web:build": "cd web && npm run build",
+    "smoke:api": "node scripts/smoke-api.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",
+    "express": "^5.2.1",
     "playwright": "^1.49.0",
     "winston": "^3.17.0"
   }

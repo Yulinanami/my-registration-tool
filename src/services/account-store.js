@@ -63,6 +63,16 @@ class AccountStore {
     stmt.run(STATUS.ACTIVE, now, now, id);
   }
 
+  // 按 id 查找
+  findById(id) {
+    return this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
+  }
+
+  // 按 id 删除
+  deleteById(id) {
+    return this.db.prepare('DELETE FROM accounts WHERE id = ?').run(id).changes;
+  }
+
   // 一轮检查后统一删除被标记账号 (返回被删账号列表)
   purgeRemovePending() {
     const purge = this.db.transaction(() => {
