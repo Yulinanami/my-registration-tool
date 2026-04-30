@@ -45,29 +45,15 @@ async function checkOne({ browser, account, config, logger }) {
           return { ok: false, reason: loginResult.result };
         }
 
-        // 需要 OTP，去收信页拿验证码
+        // 需要 OTP，去这个账号的收信页拿验证码
         mailContext = await browser.newContext({
           locale: 'zh-CN',
           viewport: { width: 1280, height: 720 },
         });
         scraper = new MailScraper(mailContext, logger, config);
 
-        const mailPage = await mailContext.newPage();
-        const mailUrl = `https://mail.chatgpt.org.uk/${encodeURIComponent(account.email)}`;
         try {
-          await mailPage.goto(mailUrl, {
-            waitUntil: 'domcontentloaded',
-            timeout: config.mailPageTimeoutMs,
-          });
-        } catch (e) {
-          logger.warn(`[Checker] 打开收信页失败: ${e.message}`);
-          return { ok: false, reason: 'mail_page_unreachable' };
-        }
-        await mailPage.close().catch(() => {});
-
-        // 用 scraper.init 走它的查找邮箱地址 + 弹窗清理流程，再等验证邮件
-        try {
-          await scraper.init();
+          await scraper.initForEmail(account.email);
         } catch (e) {
           logger.warn(`[Checker] 收信页初始化失败: ${e.message}`);
           return { ok: false, reason: 'mail_page_init_failed' };

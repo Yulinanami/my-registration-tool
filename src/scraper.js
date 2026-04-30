@@ -11,7 +11,7 @@ class MailScraper {
     this.currentEmail = null;
   }
 
-  // 打开邮箱页面
+  // 打开邮箱页面 (主页，会自动分配新临时邮箱)
   async init() {
     this.page = await this.context.newPage();
     await this.page.goto('https://mail.chatgpt.org.uk', {
@@ -25,6 +25,32 @@ class MailScraper {
     this.logger.info(`[Mail] 初始化完成，当前邮箱: ${this.currentEmail}`);
 
     return this.currentEmail;
+  }
+
+  // 打开指定邮箱的收件页 (用于登录检测时收 OTP)
+  async initForEmail(email) {
+    this.page = await this.context.newPage();
+    // GPTMail 路由识别字面 @，encodeURIComponent 会把 @ 编成 %40 导致路由失败
+    const url = `https://mail.chatgpt.org.uk/${email}`;
+    this.logger.info(`[Mail] 打开收信页: ${url}`);
+    await this.page.goto(url, {
+      waitUntil: 'domcontentloaded',
+      timeout: this.config.mailPageTimeoutMs,
+    });
+
+    await this.page.waitForSelector('#emailDisplay', { timeout: this.config.mailEmailTimeoutMs });
+    await this._dismissPopups();
+
+    // 页面是渐进渲染（"79" -> "79d3..." -> 完整邮箱），先等到一个完整邮箱再比对
+    const displayed = await this._waitForRealEmail();
+    if (displayed && displayed.toLowerCase() === email.toLowerCase()) {
+      this.currentEmail = displayed;
+      this.logger.info(`[Mail] 初始化完成（指定邮箱），当前邮箱: ${this.currentEmail}`);
+      return this.currentEmail;
+    }
+
+    this.logger.error(`[Mail] 收信页显示邮箱 (${displayed}) 与请求 (${email}) 不一致，路由失败`);
+    throw new Error(`mail_page_wrong_mailbox: requested=${email} actual=${displayed}`);
   }
 
   // 等待验证邮件

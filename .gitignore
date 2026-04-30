@@ -2,3 +2,4 @@ node_modules/*
 results/
 PLAN.md
 emails.txt
+data/*
