@@ -1,6 +1,11 @@
 {
   "password": "qwerasdfzxcv",
   "headless": false,
+  "accountStorePath": "data/accounts.sqlite",
+  "lockFilePath": "runtime/app.lock",
+  "targetAccounts": 10,
+  "checkIntervalMinutes": 30,
+  "replenishDelayMs": 3000,
   "mailPollIntervalMs": 3000,
   "mailPollTimeoutMs": 120000,
   "maxRetries": 20,
