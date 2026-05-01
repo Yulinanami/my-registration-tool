@@ -1,127 +1,240 @@
-# 自动注册工具
+# 账号池守护工具
 
-基于 Playwright 的账号注册辅助工具，负责获取临时邮箱、填写注册表单、等待验证邮件，并把成功账号写入 `emails.txt`。
+基于 Playwright 的账号池守护进程：自动注册、定时轮询登录检测、失效剔除、自动补齐，并附带带登录鉴权的 Web 管理界面。
 
 ## 功能
 
-- 自动打开浏览器并执行注册流程。
-- 自动读取临时邮箱和验证邮件。
-- 支持验证链接和六位验证码。
-- 浏览器断开后会重新启动。
-- 运行日志写入 `results/run.log`。
+- **账号池守护**：常驻进程持续把可用账号维持到目标数量
+- **定时轮询**：每隔可配置的间隔登录每个账号验证可用性，失效自动从池中删除
+- **自动补齐**：池子不足时自动注册新账号补满
+- **Web 管理界面**：仪表板、账号列表、运行日志、配置编辑、手动触发
+- **登录鉴权**：固定账号密码 + 进程内 token，避免泄露
+- **单实例锁**：lock 文件 + PID 校验，防止重复启动
+- **优雅退出**：SIGINT/SIGTERM 收到后等当前任务结束再退出
+
+## 技术栈
+
+- 后端：Node.js + Playwright + Express 5 + better-sqlite3 + winston
+- 前端：Vue 3 + TypeScript + Vite + Naive UI + Pinia 风格的 axios 客户端
 
 ## 安装
 
 ```bash
+# 后端依赖
 npm install
+
+# 前端依赖
+npm run web:install
 ```
 
-如需安装 Playwright Chromium 内核：
+如系统里没有 Chromium 内核，可让 Playwright 装一个：
 
 ```bash
 npm run install-browser
 ```
 
-## 浏览器说明
-
-程序只使用 Chromium 内核，不会使用 Firefox 或 WebKit。启动时会尽量使用用户电脑里已有的 Chromium 内核浏览器，按顺序尝试：
+启动时会按下面顺序找可用 Chromium 内核：
 
 1. `config.json` 里的 `chromiumPath`
-2. 用 `where` 查找 Chrome、Edge、Brave、Opera、Vivaldi、Chromium
+2. 用 `where` / `which` 查找 Chrome、Edge、Brave、Opera、Vivaldi、Chromium
 3. Windows 注册表里的浏览器路径
-4. 系统常见安装位置里的浏览器路径
+4. 系统常见安装位置
 5. Playwright 自带 Chromium
-
-Chrome、Edge、Brave、Opera、Vivaldi 都是 Chromium 内核，所以可以直接使用，不需要额外下载内核。
-
-如果以上方式都找不到可用内核，程序才会提示安装 Playwright Chromium 内核。安装命令：
-
-```bash
-npm run install-browser
-```
 
 ## 配置
 
-配置文件是 `config.json`：
+配置文件 `config.json`，常用字段：
 
-```json
-{
-  "password": "qwerasdfzxcv",
-  "headless": false,
-  "mailPollIntervalMs": 3000,
-  "mailPollTimeoutMs": 120000,
-  "maxRetries": 20,
-  "typingDelayMin": 15,
-  "typingDelayMax": 40,
-  "retryDelayMin": 800,
-  "retryDelayMax": 1500,
-  "statusCheckIntervalMs": 1500,
-  "signUpButtonTimeoutMs": 10000,
-  "registrationStatusTimeoutMs": 15000,
-  "cloudflareCheckIntervalMs": 1000,
-  "cloudflareMaxWaitMs": 30000,
-  "mailPageTimeoutMs": 30000,
-  "mailEmailTimeoutMs": 15000,
-  "mailEmailCheckIntervalMs": 1000,
-  "mailRefreshWaitMs": 800,
-  "mailDetailTimeoutMs": 5000,
-  "mailDetailRetryCount": 3,
-  "mailDetailRetryDelayMs": 1000,
-  "popupCloseDelayMs": 200,
-  "passwordInputTimeoutMs": 20000,
-  "fullName": "John Doe",
-  "firstName": "John",
-  "lastName": "Doe",
-  "birthdayText": "01/15/2000",
-  "birthdayDate": "2000-01-15",
-  "age": "25",
-  "chromiumPath": "C:\\Program Files\\Chromium\\Application\\chrome.exe"
-}
-```
-
-| 参数名 | 说明 | 默认值 |
+| 字段 | 说明 | 默认值 |
 | :--- | :--- | :--- |
-| `password` | 注册时使用的密码 | `qwerasdfzxcv` |
+| `password` | 注册新账号时使用的密码 | `qwerasdfzxcv` |
 | `headless` | 是否隐藏浏览器窗口 | `false` |
-| `maxRetries` | 最多尝试次数 | `20` |
-| `typingDelayMin` / `typingDelayMax` | 每个字的输入间隔 | `15` / `40` |
-| `retryDelayMin` / `retryDelayMax` | 失败重试前的等待 | `800` / `1500` |
-| `statusCheckIntervalMs` | 检查注册结果的间隔 | `1500` |
-| `signUpButtonTimeoutMs` | 等待注册入口打开的上限 | `10000` |
-| `registrationStatusTimeoutMs` | 提交密码后等待结果的上限 | `15000` |
-| `cloudflareCheckIntervalMs` / `cloudflareMaxWaitMs` | 等待页面保护的间隔和上限 | `1000` / `30000` |
-| `mailPollIntervalMs` / `mailPollTimeoutMs` | 查看验证邮件的间隔和上限 | `3000` / `120000` |
-| `mailPageTimeoutMs` / `mailEmailTimeoutMs` | 邮箱页面和邮箱地址等待上限 | `30000` / `15000` |
-| `mailRefreshWaitMs` / `mailDetailTimeoutMs` | 邮箱刷新和读取详情等待 | `800` / `5000` |
-| `mailDetailRetryCount` / `mailDetailRetryDelayMs` | 邮件正文没加载出来时的重试 | `3` / `1000` |
-| `popupCloseDelayMs` | 关闭弹窗后的等待 | `200` |
-| `passwordInputTimeoutMs` | 等待密码框的上限 | `20000` |
-| `fullName` | 自动填写的完整姓名 | `John Doe` |
-| `firstName` / `lastName` | 没有 `fullName` 时拼成姓名 | `John` / `Doe` |
-| `birthdayText` / `birthdayDate` | 文本生日和日期框生日 | `01/15/2000` / `2000-01-15` |
-| `age` | 自动填写的年龄 | `25` |
-| `chromiumPath` | 自定义 Chromium 路径，可不填 | 自动查找 |
+| `accountStorePath` | SQLite 数据库路径 | `data/accounts.sqlite` |
+| `lockFilePath` | 单实例锁文件路径 | `runtime/app.lock` |
+| `apiHost` / `apiPort` | HTTP 服务监听地址和端口 | `127.0.0.1` / `3000` |
+| `auth.username` / `auth.password` | Web 管理界面登录账号密码 | `admin` / 强随机密码 |
+| `targetAccounts` | 池子要维持的账号数量 | `10` |
+| `checkIntervalMinutes` | 轮询检查间隔（分钟） | `30` |
+| `maxRetries` | 单轮注册失败上限 | `20` |
+| `replenishDelayMs` | 注册之间的间隔 | `3000` |
 
-## 运行
+其余字段（输入延迟、超时、邮箱页相关）见 `config.json`，一般无需调整。
 
-交互输入数量：
+> **重要**：`auth` 字段不会通过 `/api/config` 暴露，也无法通过前端编辑，必须直接改 `config.json`。改完需要重启进程。
+
+## 本机启动
 
 ```bash
+npm run web:build
 npm start
 ```
 
-直接指定数量：
+访问 `http://127.0.0.1:3000`
+
+---
+
+## 部署到 Linux 服务器
+
+### 0. 环境检查
 
 ```bash
-node index.js 3
+# 更新源
+sudo apt update
+```
+
+```bash
+# 检查必要环境
+command -v git >/dev/null 2>&1 || sudo apt install -y git
+command -v curl >/dev/null 2>&1 || sudo apt install -y curl ca-certificates
+
+if ! command -v node >/dev/null 2>&1; then
+  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+  sudo apt install -y nodejs
+fi
+
+git --version
+node -v
+npm -v
+```
+
+### 1. 克隆项目
+
+```bash
+cd ~
+git clone https://github.com/Yulinanami/my-registration-tool
+cd my-registration-tool
+```
+
+### 2. 安装依赖
+
+```bash
+sudo apt install -y build-essential python3 make g++ xvfb nginx openssl libnspr4 libnss3
+npm install
+npm run web:install
+sudo npx playwright install-deps chromium
+npm run install-browser
+npm run web:build
+```
+
+### 3. 配置 `config.json`
+
+编辑 `config.json`，至少确认：
+
+```bash
+nano ~/my-registration-tool/config.json
+```
+
+```json
+{
+  "headless": false,
+  "apiHost": "127.0.0.1",
+  "apiPort": 3000,
+  "auth": {
+    "username": "admin",
+    "password": "<强密码>"
+  }
+}
+```
+
+`password` 请改成你自己的强密码。
+
+### 4. 配置 systemd
+
+```bash
+sudo tee /etc/systemd/system/my-registration-tool.service >/dev/null <<'EOF'
+[Unit]
+Description=My Registration Tool
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<SSH用户名>
+WorkingDirectory=/home/<SSH用户名>/my-registration-tool
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/xvfb-run -a /usr/bin/node index.js
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable my-registration-tool
+sudo systemctl restart my-registration-tool
+```
+
+### 5. 配置 Nginx
+
+```bash
+sudo tee /etc/nginx/sites-available/my-registration-tool >/dev/null <<'EOF'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name <域名>;
+
+    client_max_body_size 20m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300;
+        proxy_send_timeout 300;
+    }
+}
+EOF
+
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo ln -sf /etc/nginx/sites-available/my-registration-tool /etc/nginx/sites-enabled/my-registration-tool
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+把 `<域名>` 的 A 记录指向这台 VPS 的 IP；如果你用了 Cloudflare，先把代理关掉（灰云）再签证书。
+
+### 6. 申请 HTTPS
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d <域名> -n --agree-tos --register-unsafely-without-email --redirect
 ```
 
 ## 项目结构
 
-- `index.js`: 程序入口和整体流程。
-- `src/registrar.js`: 注册页面处理。
-- `src/scraper.js`: 临时邮箱页面处理。
-- `src/parser.js`: 验证邮件内容读取。
-- `config.json`: 运行配置。
-- `emails.txt`: 成功账号输出。
-- `results/run.log`: 运行日志。
+```
+.
+├── index.js                      程序入口（账号池常驻进程）
+├── config.json                   运行配置
+├── src/
+│   ├── api/                      HTTP 服务
+│   │   ├── server.js             Express 装配
+│   │   ├── auth.js               登录鉴权 + 中间件
+│   │   ├── runtime-state.js      运行时状态（轮次时间等）
+│   │   └── routes/               业务路由
+│   ├── db/                       SQLite (better-sqlite3)
+│   ├── scheduler/                调度器（轮询 + 补齐）
+│   ├── services/                 账号存储、注册、检查、补齐、锁
+│   ├── pages/                    Playwright 页面对象
+│   ├── registrar.js              注册流程
+│   ├── scraper.js                临时邮箱
+│   └── parser.js                 验证邮件解析
+├── web/                          前端 (Vue 3 + TS)
+│   ├── src/
+│   │   ├── App.vue
+│   │   ├── router.ts
+│   │   ├── api/                  axios 客户端 + 类型
+│   │   ├── views/                登录、仪表板、账号、日志、配置
+│   │   └── utils/
+│   └── vite.config.ts
+├── scripts/                      烟雾测试
+├── data/                         SQLite 数据库（.gitignore）
+├── runtime/                      锁文件（.gitignore）
+└── results/run.log               运行日志（.gitignore）
+```
