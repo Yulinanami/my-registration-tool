@@ -31,6 +31,10 @@ function loadConfig() {
     lockFilePath: 'runtime/app.lock',
     apiHost: '127.0.0.1',
     apiPort: 3000,
+    auth: {
+      username: 'admin',
+      password: 'Jh7$Kp2@mNq9Lx#vBf4r',
+    },
     targetAccounts: 10,
     checkIntervalMinutes: 30,
     replenishDelayMs: 3000,

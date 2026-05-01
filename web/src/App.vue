@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, h } from 'vue';
-import { RouterLink, RouterView, useRoute } from 'vue-router';
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import {
   NConfigProvider,
   NLayout,
@@ -9,15 +9,20 @@ import {
   NLayoutContent,
   NMenu,
   NIcon,
+  NButton,
   NMessageProvider,
+  NPopconfirm,
   darkTheme,
   zhCN,
   dateZhCN,
 } from 'naive-ui';
 import type { MenuOption } from 'naive-ui';
+import { logout } from '@/api/client';
 
 const route = useRoute();
+const router = useRouter();
 const activeKey = computed(() => route.name as string);
+const isLoginPage = computed(() => route.name === 'login');
 
 function renderIcon(emoji: string) {
   return () => h(NIcon, null, { default: () => emoji });
@@ -45,12 +50,20 @@ const menuOptions: MenuOption[] = [
     icon: renderIcon('⚙️'),
   },
 ];
+
+async function onLogout() {
+  await logout();
+  router.replace('/login');
+}
 </script>
 
 <template>
   <n-config-provider :theme="darkTheme" :locale="zhCN" :date-locale="dateZhCN">
     <n-message-provider>
-      <n-layout has-sider style="height: 100vh">
+      <!-- 登录页：单独布局 -->
+      <RouterView v-if="isLoginPage" />
+      <!-- 主布局 -->
+      <n-layout v-else has-sider style="height: 100vh">
         <n-layout-sider
           bordered
           :width="220"
@@ -63,7 +76,13 @@ const menuOptions: MenuOption[] = [
         </n-layout-sider>
         <n-layout>
           <n-layout-header bordered class="page-header">
-            {{ (route.meta.title as string) || '' }}
+            <span>{{ (route.meta.title as string) || '' }}</span>
+            <n-popconfirm @positive-click="onLogout">
+              <template #trigger>
+                <n-button size="small" quaternary>退出登录</n-button>
+              </template>
+              确认退出登录吗？
+            </n-popconfirm>
           </n-layout-header>
           <n-layout-content content-style="padding: 20px;">
             <RouterView />
@@ -91,5 +110,8 @@ html, body, #app {
   padding: 14px 24px;
   font-size: 15px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 </style>

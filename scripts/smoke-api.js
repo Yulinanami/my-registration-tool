@@ -33,6 +33,20 @@ async function main() {
   });
 
   const base = 'http://127.0.0.1:3001';
+
+  // 先登录拿 token
+  const loginRes = await fetch(`${base}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: config.auth?.username || 'admin',
+      password: config.auth?.password,
+    }),
+  });
+  const loginJson = await loginRes.json();
+  console.log(`POST /api/auth/login -> ${loginRes.status} (token: ${loginJson.token ? 'received' : 'missing'})`);
+  const authHeader = loginJson.token ? { Authorization: `Bearer ${loginJson.token}` } : {};
+
   const tests = [
     { method: 'GET', url: `${base}/api/stats` },
     { method: 'GET', url: `${base}/api/accounts` },
@@ -42,10 +56,14 @@ async function main() {
   ];
 
   for (const t of tests) {
-    const res = await fetch(t.url, { method: t.method });
+    const res = await fetch(t.url, { method: t.method, headers: authHeader });
     const text = await res.text();
     console.log(`${t.method} ${t.url} -> ${res.status} ${text.substring(0, 200)}${text.length > 200 ? '...' : ''}`);
   }
+
+  // 再测一遍：不带 token 应该 401
+  const unauth = await fetch(`${base}/api/stats`);
+  console.log(`GET /api/stats (no token) -> ${unauth.status} (期望 401)`);
 
   await new Promise((resolve) => server.close(resolve));
   db.close();

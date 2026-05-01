@@ -29,17 +29,31 @@ async function main() {
   });
 
   const base = 'http://127.0.0.1:3002';
+
+  // 登录拿 token
+  const loginRes = await fetch(`${base}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: config.auth?.username || 'admin',
+      password: config.auth?.password,
+    }),
+  });
+  const loginJson = await loginRes.json();
+  const token = loginJson.token;
+  const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+
   const tests = [
-    { method: 'GET', url: `${base}/`, expectContent: 'index' },
-    { method: 'GET', url: `${base}/dashboard`, expectContent: 'index' },
-    { method: 'GET', url: `${base}/api/stats` },
-    { method: 'GET', url: `${base}/api/accounts` },
+    { method: 'GET', url: `${base}/`, expectContent: 'index', auth: false },
+    { method: 'GET', url: `${base}/dashboard`, expectContent: 'index', auth: false },
+    { method: 'GET', url: `${base}/api/stats`, auth: true },
+    { method: 'GET', url: `${base}/api/accounts`, auth: true },
   ];
 
   let pass = 0;
   let fail = 0;
   for (const t of tests) {
-    const res = await fetch(t.url, { method: t.method });
+    const res = await fetch(t.url, { method: t.method, headers: t.auth ? authHeader : undefined });
     const text = await res.text();
     const status = res.status === 200 ? 'PASS' : 'FAIL';
     if (res.status === 200) pass++; else fail++;

@@ -7,6 +7,7 @@ const { accountsRouter } = require('./routes/accounts');
 const { logsRouter } = require('./routes/logs');
 const { configRouter } = require('./routes/config');
 const { actionsRouter } = require('./routes/actions');
+const { authRouter, requireAuth } = require('./auth');
 
 function createApp({ store, config, logger, controller, projectRoot }) {
   const app = express();
@@ -16,16 +17,21 @@ function createApp({ store, config, logger, controller, projectRoot }) {
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
     if (req.method === 'OPTIONS') return res.sendStatus(204);
     next();
   });
 
-  app.use('/api/stats', statsRouter({ store, config }));
-  app.use('/api/accounts', accountsRouter({ store, logger }));
-  app.use('/api/logs', logsRouter({ projectRoot }));
-  app.use('/api/config', configRouter({ projectRoot, logger }));
-  app.use('/api/actions', actionsRouter({ controller, logger }));
+  // 认证路由 (无需 token)
+  app.use('/api/auth', authRouter({ config, logger }));
+
+  // 受保护的 API 路由 (需要 token)
+  const auth = requireAuth();
+  app.use('/api/stats', auth, statsRouter({ store, config }));
+  app.use('/api/accounts', auth, accountsRouter({ store, logger }));
+  app.use('/api/logs', auth, logsRouter({ projectRoot }));
+  app.use('/api/config', auth, configRouter({ projectRoot, logger }));
+  app.use('/api/actions', auth, actionsRouter({ controller, logger }));
 
   // 静态托管前端构建产物 (生产模式)
   const webDist = path.join(projectRoot, 'web', 'dist');

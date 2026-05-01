@@ -53,6 +53,8 @@ function configRouter({ projectRoot, logger }) {
     try {
       const raw = fs.readFileSync(configPath, 'utf-8');
       const parsed = JSON.parse(raw);
+      // 屏蔽登录凭证 (auth 字段不允许通过 API 读出/写入)
+      if (parsed.auth) delete parsed.auth;
       res.json({ config: parsed, path: configPath });
     } catch (e) {
       res.status(500).json({ error: e.message });
