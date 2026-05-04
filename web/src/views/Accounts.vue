@@ -10,13 +10,25 @@ import {
   useMessage,
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
-import { fetchAccounts, deleteAccount } from '@/api/client';
+import { fetchAccounts, markAccountUsed, deleteAccount } from '@/api/client';
 import type { Account } from '@/api/types';
 import { formatTimestamp, statusTag } from '@/utils/format';
 
 const message = useMessage();
 const accounts = ref<Account[]>([]);
 const loading = ref(false);
+
+async function copyEmail(row: Account) {
+  try {
+    await navigator.clipboard.writeText(row.email);
+    const updated = await markAccountUsed(row.id);
+    const index = accounts.value.findIndex((account) => account.id === row.id);
+    if (index >= 0) accounts.value[index] = updated;
+    message.success('邮箱已复制，已标记使用');
+  } catch (e: unknown) {
+    message.error('复制邮箱失败');
+  }
+}
 
 async function load() {
   loading.value = true;
@@ -43,7 +55,22 @@ async function onDelete(id: number) {
 
 const columns: DataTableColumns<Account> = [
   { title: 'ID', key: 'id', width: 70 },
-  { title: '邮箱', key: 'email', minWidth: 240, ellipsis: { tooltip: true } },
+  {
+    title: '邮箱',
+    key: 'email',
+    minWidth: 240,
+    render: (row) =>
+      h(
+        NButton,
+        {
+          text: true,
+          type: 'primary',
+          style: { padding: 0, height: 'auto' },
+          onClick: () => copyEmail(row),
+        },
+        { default: () => row.email }
+      ),
+  },
   { title: '密码', key: 'password', width: 140, ellipsis: { tooltip: true } },
   {
     title: '状态',
@@ -52,6 +79,18 @@ const columns: DataTableColumns<Account> = [
     render(row) {
       const tag = statusTag(row.status);
       return h(NTag, { type: tag.type, size: 'small' }, { default: () => tag.label });
+    },
+  },
+  {
+    title: '是否使用过',
+    key: 'usedAt',
+    width: 110,
+    render(row) {
+      return h(
+        NTag,
+        { type: row.usedAt ? 'success' : 'default', size: 'small' },
+        { default: () => (row.usedAt ? '已使用' : '未使用') }
+      );
     },
   },
   {
@@ -107,7 +146,7 @@ onMounted(load);
       :columns="columns"
       :data="accounts"
       :loading="loading"
-      :scroll-x="1500"
+      :scroll-x="1600"
       size="small"
       :row-key="(row: Account) => row.id"
     />

@@ -24,7 +24,7 @@
 npm install
 
 # 前端依赖
-npm run web:install
+cd web && npm install && cd ..
 ```
 
 如系统里没有 Chromium 内核，可让 Playwright 装一个：
@@ -60,7 +60,7 @@ npm run install-browser
 
 其余字段（输入延迟、超时、邮箱页相关）见 `config.json`，一般无需调整。
 
-> **重要**：`auth` 字段不会通过 `/api/config` 暴露，也无法通过前端编辑，必须直接改 `config.json`。改完需要重启进程。
+> **重要**：`auth.password` 不会通过 `/api/config` 明文返回；可在前端配置页修改，保存后自动重启生效。
 
 ## 本机启动
 
@@ -112,7 +112,7 @@ cd my-registration-tool
 ```bash
 sudo apt install -y build-essential python3 make g++ xvfb nginx openssl libnspr4 libnss3
 npm install
-npm run web:install
+cd web && npm install && cd ..
 sudo npx playwright install-deps chromium
 npm run install-browser
 npm run web:build

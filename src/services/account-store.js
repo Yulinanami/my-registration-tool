@@ -63,6 +63,15 @@ class AccountStore {
     stmt.run(STATUS.ACTIVE, now, now, id);
   }
 
+  // 标记为已使用 (账号列表点击复制邮箱后写入)
+  markUsed(id) {
+    const now = Date.now();
+    this.db
+      .prepare('UPDATE accounts SET usedAt = COALESCE(usedAt, ?) WHERE id = ?')
+      .run(now, id);
+    return this.findById(id);
+  }
+
   // 按 id 查找
   findById(id) {
     return this.db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);

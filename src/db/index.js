@@ -17,7 +17,16 @@ function openDatabase(dbPath) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.exec(SCHEMA_SQL);
+  ensureUsedAtColumn(db);
   return db;
+}
+
+function ensureUsedAtColumn(db) {
+  const columns = db.prepare('PRAGMA table_info(accounts)').all();
+  const hasUsedAt = columns.some((col) => col.name === 'usedAt');
+  if (!hasUsedAt) {
+    db.prepare('ALTER TABLE accounts ADD COLUMN usedAt INTEGER').run();
+  }
 }
 
 // 获取全局数据库实例

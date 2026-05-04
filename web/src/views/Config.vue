@@ -26,7 +26,6 @@ const original = ref<ConfigPayload>({});
 const loading = ref(false);
 const saving = ref(false);
 const restarting = ref(false);
-const passwordPlaceholder = ref('__UNCHANGED__');
 
 // auth 字段独立追踪，不和 config 走同一个 reactive 引用
 // 关键：authPassword 始终从空开始 (避免占位符被用户当成已有内容拼接)
@@ -174,7 +173,6 @@ async function load() {
     const res = await fetchConfig();
     config.value = JSON.parse(JSON.stringify(res.config));
     original.value = JSON.parse(JSON.stringify(res.config));
-    if (res.passwordPlaceholder) passwordPlaceholder.value = res.passwordPlaceholder;
 
     // auth 字段独立同步：username 显示当前值，password 永远从空开始
     const auth = (res.config.auth as Record<string, unknown> | undefined) || {};

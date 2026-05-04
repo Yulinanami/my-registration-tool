@@ -8,6 +8,7 @@ export interface Account {
   createdAt: number;
   lastCheckedAt: number | null;
   lastSuccessAt: number | null;
+  usedAt: number | null;
   failReason: string | null;
   checkCount: number;
   registerAttempt: number | null;
@@ -52,5 +53,4 @@ export interface ConfigPayload {
 export interface ConfigResponse {
   config: ConfigPayload;
   path: string;
-  passwordPlaceholder?: string;
 }

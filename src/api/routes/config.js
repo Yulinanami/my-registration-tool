@@ -1,11 +1,8 @@
-// GET /api/config — 读取当前 config.json (auth.password 屏蔽，回传占位符)
+// GET /api/config — 读取当前 config.json (auth.password 屏蔽)
 // PUT /api/config — 写入 config.json，立即触发重启
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-
-// 前端发回 auth.password 用此占位符表示"不修改"
-const PASSWORD_PLACEHOLDER = '__UNCHANGED__';
 
 function configRouter({ projectRoot, logger, controller }) {
   const router = express.Router();
@@ -17,9 +14,9 @@ function configRouter({ projectRoot, logger, controller }) {
       const parsed = JSON.parse(raw);
       // 屏蔽 auth.password，避免明文回传
       if (parsed.auth && typeof parsed.auth === 'object') {
-        parsed.auth = { ...parsed.auth, password: PASSWORD_PLACEHOLDER };
+        parsed.auth = { ...parsed.auth, password: '' };
       }
-      res.json({ config: parsed, path: configPath, passwordPlaceholder: PASSWORD_PLACEHOLDER });
+      res.json({ config: parsed, path: configPath });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -46,8 +43,7 @@ function configRouter({ projectRoot, logger, controller }) {
         }
         if (
           typeof incoming.auth.password === 'string' &&
-          incoming.auth.password &&
-          incoming.auth.password !== PASSWORD_PLACEHOLDER
+          incoming.auth.password
         ) {
           mergedAuth.password = incoming.auth.password;
         }

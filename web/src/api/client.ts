@@ -107,6 +107,11 @@ export async function fetchAccounts(): Promise<Account[]> {
   return data.accounts;
 }
 
+export async function markAccountUsed(id: number): Promise<Account> {
+  const { data } = await http.post<{ account: Account }>(`/accounts/${id}/used`);
+  return data.account;
+}
+
 export async function deleteAccount(id: number): Promise<void> {
   await http.delete(`/accounts/${id}`);
 }

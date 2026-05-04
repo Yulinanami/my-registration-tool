@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   createdAt INTEGER NOT NULL,
   lastCheckedAt INTEGER,
   lastSuccessAt INTEGER,
+  usedAt INTEGER,
   failReason TEXT,
   checkCount INTEGER NOT NULL DEFAULT 0,
   registerAttempt INTEGER

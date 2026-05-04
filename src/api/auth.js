@@ -7,11 +7,7 @@ const path = require('path');
 const tokens = new Set();
 let tokensFile = null;
 
-// 进程实例 ID：每次进程启动重新生成。前端用它来确认 supervisor 已经把新进程拉起来了。
 const INSTANCE_ID = crypto.randomBytes(8).toString('hex');
-function getInstanceId() {
-  return INSTANCE_ID;
-}
 
 // 启动时配置：指定 token 持久化文件
 function configureAuth({ tokensPath } = {}) {
@@ -120,4 +116,4 @@ function requireAuth() {
   };
 }
 
-module.exports = { authRouter, requireAuth, configureAuth, getInstanceId };
+module.exports = { authRouter, requireAuth, configureAuth };
