@@ -7,11 +7,18 @@ const { accountsRouter } = require('./routes/accounts');
 const { logsRouter } = require('./routes/logs');
 const { configRouter } = require('./routes/config');
 const { actionsRouter } = require('./routes/actions');
-const { authRouter, requireAuth } = require('./auth');
+const { authRouter, requireAuth, configureAuth } = require('./auth');
 
 function createApp({ store, config, logger, controller, projectRoot }) {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
+
+  // 持久化 token 文件位置：和 lock 文件同目录
+  const lockPath = path.isAbsolute(config.lockFilePath || '')
+    ? config.lockFilePath
+    : path.join(projectRoot, config.lockFilePath || 'runtime/app.lock');
+  const tokensPath = path.join(path.dirname(lockPath), 'auth-tokens.json');
+  configureAuth({ tokensPath });
 
   // 开发环境下允许跨域 (Vite dev server 在另一个端口)
   app.use((req, res, next) => {
@@ -30,7 +37,7 @@ function createApp({ store, config, logger, controller, projectRoot }) {
   app.use('/api/stats', auth, statsRouter({ store, config }));
   app.use('/api/accounts', auth, accountsRouter({ store, logger }));
   app.use('/api/logs', auth, logsRouter({ projectRoot }));
-  app.use('/api/config', auth, configRouter({ projectRoot, logger }));
+  app.use('/api/config', auth, configRouter({ projectRoot, logger, controller }));
   app.use('/api/actions', auth, actionsRouter({ controller, logger }));
 
   // 静态托管前端构建产物 (生产模式)

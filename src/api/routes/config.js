@@ -1,51 +1,13 @@
-// GET /api/config — 读取当前 config.json
-// PUT /api/config — 写入 config.json (需要重启生效)
+// GET /api/config — 读取当前 config.json (auth.password 屏蔽，回传占位符)
+// PUT /api/config — 写入 config.json，立即触发重启
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 
-const ALLOWED_KEYS = new Set([
-  'password',
-  'headless',
-  'accountStorePath',
-  'lockFilePath',
-  'targetAccounts',
-  'checkIntervalMinutes',
-  'replenishDelayMs',
-  'mailPollIntervalMs',
-  'mailPollTimeoutMs',
-  'maxRetries',
-  'typingDelayMin',
-  'typingDelayMax',
-  'retryDelayMin',
-  'retryDelayMax',
-  'statusCheckIntervalMs',
-  'signUpButtonTimeoutMs',
-  'signUpClickCheckMs',
-  'registrationStatusTimeoutMs',
-  'cloudflareCheckIntervalMs',
-  'cloudflareMaxWaitMs',
-  'mailPageTimeoutMs',
-  'mailEmailTimeoutMs',
-  'mailEmailCheckIntervalMs',
-  'mailRefreshWaitMs',
-  'mailDetailTimeoutMs',
-  'mailDetailRetryCount',
-  'mailDetailRetryDelayMs',
-  'popupCloseDelayMs',
-  'passwordInputTimeoutMs',
-  'fullName',
-  'firstName',
-  'lastName',
-  'birthdayText',
-  'birthdayDate',
-  'age',
-  'chromiumPath',
-  'browserPath',
-  'chromePath',
-]);
+// 前端发回 auth.password 用此占位符表示"不修改"
+const PASSWORD_PLACEHOLDER = '__UNCHANGED__';
 
-function configRouter({ projectRoot, logger }) {
+function configRouter({ projectRoot, logger, controller }) {
   const router = express.Router();
   const configPath = path.join(projectRoot, 'config.json');
 
@@ -53,9 +15,11 @@ function configRouter({ projectRoot, logger }) {
     try {
       const raw = fs.readFileSync(configPath, 'utf-8');
       const parsed = JSON.parse(raw);
-      // 屏蔽登录凭证 (auth 字段不允许通过 API 读出/写入)
-      if (parsed.auth) delete parsed.auth;
-      res.json({ config: parsed, path: configPath });
+      // 屏蔽 auth.password，避免明文回传
+      if (parsed.auth && typeof parsed.auth === 'object') {
+        parsed.auth = { ...parsed.auth, password: PASSWORD_PLACEHOLDER };
+      }
+      res.json({ config: parsed, path: configPath, passwordPlaceholder: PASSWORD_PLACEHOLDER });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }
@@ -63,23 +27,45 @@ function configRouter({ projectRoot, logger }) {
 
   router.put('/', (req, res) => {
     const incoming = req.body || {};
-    const filtered = {};
-    for (const [key, value] of Object.entries(incoming)) {
-      if (ALLOWED_KEYS.has(key)) {
-        filtered[key] = value;
-      }
-    }
-    if (Object.keys(filtered).length === 0) {
-      return res.status(400).json({ error: 'no_valid_keys' });
+    if (typeof incoming !== 'object' || Array.isArray(incoming)) {
+      return res.status(400).json({ error: 'invalid_body' });
     }
 
     try {
       const raw = fs.readFileSync(configPath, 'utf-8');
       const current = JSON.parse(raw);
-      const next = { ...current, ...filtered };
+
+      // 合并：默认全字段透传 (浅合并)
+      const next = { ...current, ...incoming };
+
+      // 单独处理 auth：保护 username/password 不被空值/占位符覆盖
+      if (incoming.auth && typeof incoming.auth === 'object') {
+        const mergedAuth = { ...(current.auth || {}) };
+        if (typeof incoming.auth.username === 'string' && incoming.auth.username.trim()) {
+          mergedAuth.username = incoming.auth.username.trim();
+        }
+        if (
+          typeof incoming.auth.password === 'string' &&
+          incoming.auth.password &&
+          incoming.auth.password !== PASSWORD_PLACEHOLDER
+        ) {
+          mergedAuth.password = incoming.auth.password;
+        }
+        next.auth = mergedAuth;
+      }
+
       fs.writeFileSync(configPath, JSON.stringify(next, null, 2) + '\n', 'utf-8');
-      logger.info(`[API] 配置已更新: ${Object.keys(filtered).join(', ')} (重启生效)`);
-      res.json({ ok: true, updated: filtered, restartRequired: true });
+      const changedKeys = Object.keys(incoming).filter((k) => k !== 'auth' || incoming.auth);
+      logger.info(`[API] 配置已更新: ${changedKeys.join(', ')}`);
+
+      // 先把响应发回去，再触发立即重启，避免打断前端保存请求
+      const canRestart = controller && typeof controller.requestRestart === 'function';
+      if (canRestart) {
+        res.once('finish', () => {
+          controller.requestRestart();
+        });
+      }
+      res.json({ ok: true, restarting: !!canRestart, changedKeys });
     } catch (e) {
       res.status(500).json({ error: e.message });
     }

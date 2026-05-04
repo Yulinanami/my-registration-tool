@@ -8,8 +8,7 @@
     "install-browser": "npx playwright install chromium",
     "web:install": "cd web && npm install",
     "web:dev": "cd web && npm run dev",
-    "web:build": "cd web && npm run build",
-    "smoke:api": "node scripts/smoke-api.js"
+    "web:build": "cd web && npm run build"
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",

@@ -1,9 +1,40 @@
-// 登录认证：固定账号密码 + 内存 token
+// 登录认证：固定账号密码 + 持久化 token (跨重启保留)
 const express = require('express');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
-// 进程内 token 集合 (重启后失效)
 const tokens = new Set();
+let tokensFile = null;
+
+// 进程实例 ID：每次进程启动重新生成。前端用它来确认 supervisor 已经把新进程拉起来了。
+const INSTANCE_ID = crypto.randomBytes(8).toString('hex');
+function getInstanceId() {
+  return INSTANCE_ID;
+}
+
+// 启动时配置：指定 token 持久化文件
+function configureAuth({ tokensPath } = {}) {
+  tokensFile = tokensPath || null;
+  tokens.clear();
+  if (!tokensFile || !fs.existsSync(tokensFile)) return;
+  try {
+    const arr = JSON.parse(fs.readFileSync(tokensFile, 'utf-8'));
+    if (Array.isArray(arr)) {
+      for (const t of arr) {
+        if (typeof t === 'string') tokens.add(t);
+      }
+    }
+  } catch (e) {}
+}
+
+function persistTokens() {
+  if (!tokensFile) return;
+  try {
+    fs.mkdirSync(path.dirname(tokensFile), { recursive: true });
+    fs.writeFileSync(tokensFile, JSON.stringify([...tokens]), 'utf-8');
+  } catch (e) {}
+}
 
 function generateToken() {
   return crypto.randomBytes(32).toString('hex');
@@ -45,6 +76,7 @@ function authRouter({ config, logger }) {
 
     const token = generateToken();
     tokens.add(token);
+    persistTokens();
     logger.info(`[Auth] 登录成功: ${username}`);
     res.json({ ok: true, token });
   });
@@ -52,7 +84,9 @@ function authRouter({ config, logger }) {
   // 退出
   router.post('/logout', (req, res) => {
     const token = extractToken(req);
-    if (token) tokens.delete(token);
+    if (token && tokens.delete(token)) {
+      persistTokens();
+    }
     res.json({ ok: true });
   });
 
@@ -60,9 +94,9 @@ function authRouter({ config, logger }) {
   router.get('/me', (req, res) => {
     const token = extractToken(req);
     if (token && tokens.has(token)) {
-      return res.json({ ok: true, username: expectedUser });
+      return res.json({ ok: true, username: expectedUser, instanceId: INSTANCE_ID });
     }
-    res.status(401).json({ error: 'unauthorized' });
+    res.status(401).json({ error: 'unauthorized', instanceId: INSTANCE_ID });
   });
 
   return router;
@@ -86,4 +120,4 @@ function requireAuth() {
   };
 }
 
-module.exports = { authRouter, requireAuth };
+module.exports = { authRouter, requireAuth, configureAuth, getInstanceId };

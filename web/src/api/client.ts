@@ -31,16 +31,17 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
-// 响应拦截：401 时清 token + 跳登录页
+// 响应拦截：401 时清 token + 跳登录页 (auth 相关接口由调用方自行处理)
 http.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      clearToken();
-      // 避免在登录接口本身的 401 上重复跳转
-      if (!error.config?.url?.includes('/auth/login')) {
-        const current = window.location.pathname + window.location.search;
+      const url = error.config?.url || '';
+      const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/me') || url.includes('/auth/logout');
+      if (!isAuthEndpoint) {
+        clearToken();
         if (window.location.pathname !== '/login') {
+          const current = window.location.pathname + window.location.search;
           window.location.replace(`/login?redirect=${encodeURIComponent(current)}`);
         }
       }
@@ -63,9 +64,37 @@ export async function logout(): Promise<void> {
   clearToken();
 }
 
-export async function fetchMe(): Promise<{ ok: boolean; username: string }> {
+export async function fetchMe(): Promise<{ ok: boolean; username: string; instanceId?: string }> {
   const { data } = await http.get('/auth/me');
   return data;
+}
+
+// 重启后轮询 /auth/me，等待 instanceId 改变 (= 旧进程已退、新进程已起)
+// 仅看 "200 响应" 是不够的：旧进程在关停前会持续响应，会读到旧 config
+export async function waitForServer(
+  beforeInstanceId: string,
+  timeoutMs = 60000,
+  intervalMs = 1000
+): Promise<'ready' | 'unauthorized' | 'timeout'> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const { data } = await http.get('/auth/me', { timeout: 3000 });
+      const newId = data?.instanceId;
+      if (newId && newId !== beforeInstanceId) return 'ready';
+      // 同一个 instance ID = 旧进程还在跑，继续等
+    } catch (e: any) {
+      if (e?.response?.status === 401) {
+        // 401 也带 instanceId，看是不是新进程
+        const newId = e.response.data?.instanceId;
+        if (newId && newId !== beforeInstanceId) return 'unauthorized';
+        // 旧进程的 401 (不太可能，因为我们刚用同一 token 调过 PUT)，继续等
+      }
+      // 网络错误：服务在切换中，继续等
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return 'timeout';
 }
 
 export async function fetchStats(): Promise<Stats> {
@@ -92,7 +121,7 @@ export async function fetchConfig(): Promise<ConfigResponse> {
   return data;
 }
 
-export async function updateConfig(payload: ConfigPayload): Promise<{ ok: boolean; updated: ConfigPayload; restartRequired: boolean }> {
+export async function updateConfig(payload: ConfigPayload): Promise<{ ok: boolean; restarting: boolean; changedKeys: string[] }> {
   const { data } = await http.put('/config', payload);
   return data;
 }

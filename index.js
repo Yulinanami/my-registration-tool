@@ -1,6 +1,6 @@
 // 程序入口：账号池常驻进程
 const { chromium } = require('playwright');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const winston = require('winston');
@@ -14,6 +14,9 @@ const PROJECT_ROOT = path.resolve(__dirname);
 const CONFIG_PATH = path.join(PROJECT_ROOT, 'config.json');
 const LOG_DIR = path.join(PROJECT_ROOT, 'results');
 const LOG_PATH = path.join(LOG_DIR, 'run.log');
+const RESTART_CODE = 75;
+const RESTART_DELAY_MS = 1000;
+const WORKER_MODE = process.env.WORKER_MODE === '1';
 const BROWSER_ARGS = [
   '--disable-blink-features=AutomationControlled',
   '--disable-translate',
@@ -281,6 +284,56 @@ async function launchBrowser(config, logger) {
   throw new Error('找到的 Chromium 内核都无法启动，请运行 npm run install-browser 重新安装内核');
 }
 
+// 守护模式：监听 worker 退出码，75 表示重启
+function startSupervisor() {
+  let child = null;
+  let shuttingDown = false;
+
+  function spawnWorker() {
+    child = spawn(process.execPath, [__filename], {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        WORKER_MODE: '1',
+      },
+    });
+
+    child.on('exit', (code, signal) => {
+      if (shuttingDown) {
+        process.exit(typeof code === 'number' ? code : 0);
+        return;
+      }
+      if (code === RESTART_CODE) {
+        console.log(`[Supervisor] 子进程请求重启，${RESTART_DELAY_MS}ms 后重新启动...`);
+        setTimeout(spawnWorker, RESTART_DELAY_MS);
+        return;
+      }
+      if (signal) {
+        console.log(`[Supervisor] 子进程被信号 ${signal} 终止`);
+        process.exit(0);
+        return;
+      }
+      process.exit(typeof code === 'number' ? code : 0);
+    });
+  }
+
+  function forwardSignal(signal) {
+    return () => {
+      shuttingDown = true;
+      if (child && !child.killed) {
+        try {
+          child.kill(signal);
+        } catch (e) {}
+      }
+    };
+  }
+
+  process.on('SIGINT', forwardSignal('SIGINT'));
+  process.on('SIGTERM', forwardSignal('SIGTERM'));
+
+  spawnWorker();
+}
+
 // 启动账号池常驻进程
 async function main() {
   console.log(`
@@ -301,6 +354,33 @@ async function main() {
 
   let browser = null;
   let httpServer = null;
+  let restartRequested = false;
+  let shutdownInProgress = false;
+
+  async function shutdown(exitCode) {
+    if (shutdownInProgress) return;
+    shutdownInProgress = true;
+
+    try {
+      if (httpServer) {
+        try {
+          if (typeof httpServer.closeAllConnections === 'function') {
+            httpServer.closeAllConnections();
+          }
+          await new Promise((resolve) => httpServer.close(resolve));
+        } catch (e) {}
+      }
+      if (browser && browser.isConnected()) {
+        try { await browser.close(); } catch (e) {}
+      }
+      closeDatabase();
+      releaseLock(lockPath, logger);
+      logger.info(`已清理资源，进程退出 (code=${exitCode}${exitCode === 75 ? '，supervisor 将重启' : ''})`);
+    } finally {
+      process.exit(exitCode);
+    }
+  }
+
   try {
     const dbPath = path.isAbsolute(config.accountStorePath)
       ? config.accountStorePath
@@ -338,6 +418,21 @@ async function main() {
     // 启动调度器 (返回主循环 Promise + API controller)
     const { mainLoopPromise, controller } = startScheduler({ store, config, logger, getBrowser, shouldStop });
 
+    // 给 controller 加上重启钩子：被 API 调用，触发优雅退出 + 退出码 75 让 supervisor 重启
+    controller.requestRestart = () => {
+      if (restartRequested) return false;
+      restartRequested = true;
+      stopRequested = true;
+      logger.warn('[Lifecycle] 收到重启请求，准备立即重启');
+      setImmediate(() => {
+        shutdown(75).catch((e) => {
+          logger.error(`[Lifecycle] 重启清理失败: ${e.message}`);
+          process.exit(75);
+        });
+      });
+      return true;
+    };
+
     // 启动 HTTP 服务 (前端 + API)
     httpServer = await startApiServer({
       store,
@@ -351,20 +446,22 @@ async function main() {
 
     await mainLoopPromise;
   } finally {
-    if (httpServer) {
-      try { await new Promise((resolve) => httpServer.close(resolve)); } catch (e) {}
+    if (!shutdownInProgress) {
+      try {
+        await shutdown(restartRequested ? 75 : 0);
+      } catch (e) {
+        process.exit(restartRequested ? 75 : 0);
+      }
     }
-    if (browser && browser.isConnected()) {
-      try { await browser.close(); } catch (e) {}
-    }
-    closeDatabase();
-    releaseLock(lockPath, logger);
-    logger.info('已清理资源，进程退出');
   }
 }
 
-main().catch((error) => {
-  console.error(`\n程序异常退出: ${error.message}`);
-  console.error(error.stack);
-  process.exit(1);
-});
+if (WORKER_MODE) {
+  main().catch((error) => {
+    console.error(`\n程序异常退出: ${error.message}`);
+    console.error(error.stack);
+    process.exit(1);
+  });
+} else {
+  startSupervisor();
+}

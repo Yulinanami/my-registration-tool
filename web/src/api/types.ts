@@ -43,11 +43,14 @@ export interface LogsResponse {
   total?: number;
 }
 
+export type ConfigValue = string | number | boolean | { [k: string]: ConfigValue };
+
 export interface ConfigPayload {
-  [key: string]: string | number | boolean;
+  [key: string]: ConfigValue;
 }
 
 export interface ConfigResponse {
   config: ConfigPayload;
   path: string;
+  passwordPlaceholder?: string;
 }

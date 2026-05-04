@@ -71,6 +71,8 @@ npm start
 
 访问 `http://127.0.0.1:3000`
 
+保存配置后的自动重启由 `index.js` 内置守护逻辑处理。
+
 ---
 
 ## 部署到 Linux 服务器
@@ -152,7 +154,7 @@ Type=simple
 User=<SSH用户名>
 WorkingDirectory=/home/<SSH用户名>/my-registration-tool
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/xvfb-run -a /usr/bin/node index.js
+ExecStart=/usr/bin/xvfb-run -a /usr/bin/npm start
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM
@@ -210,7 +212,7 @@ sudo certbot --nginx -d <域名> -n --agree-tos --register-unsafely-without-emai
 
 ```
 .
-├── index.js                      程序入口（账号池常驻进程）
+├── index.js                      主进程逻辑
 ├── config.json                   运行配置
 ├── src/
 │   ├── api/                      HTTP 服务
@@ -233,7 +235,6 @@ sudo certbot --nginx -d <域名> -n --agree-tos --register-unsafely-without-emai
 │   │   ├── views/                登录、仪表板、账号、日志、配置
 │   │   └── utils/
 │   └── vite.config.ts
-├── scripts/                      烟雾测试
 ├── data/                         SQLite 数据库（.gitignore）
 ├── runtime/                      锁文件（.gitignore）
 └── results/run.log               运行日志（.gitignore）
