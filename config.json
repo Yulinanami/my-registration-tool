@@ -10,11 +10,11 @@
     "password": "Jh7$Kp2@mNq9Lx#vBf4r"
   },
   "targetAccounts": 10,
-  "checkIntervalMinutes": 30,
+  "checkIntervalMinutes": 240,
   "replenishDelayMs": 3000,
   "mailPollIntervalMs": 3000,
   "mailPollTimeoutMs": 10000,
-  "maxRetries": 20,
+  "maxRetries": 100,
   "typingDelayMin": 25,
   "typingDelayMax": 60,
   "retryDelayMin": 1000,
